@@ -110,11 +110,13 @@ public final class TickerService extends Service {
     /** Jokes for one GOLIARDIA feed, rotated by refresh count; capped like network feeds. */
     private List<String> goliardiaBatch(String name) {
         List<String> all = Prefs.goliardiaTitles(this, name);
-        if (all.isEmpty()) return all;
         List<String> out = new ArrayList<>();
-        int off = goliRotate++ % all.size();
-        for (int i = 0; i < all.size(); i++) out.add(all.get((off + i) % all.size()));
-        return trim(out);
+        for (String s : all) if (!s.trim().isEmpty()) out.add(s.trim());
+        if (out.isEmpty()) return out;
+        int off = goliRotate++ % out.size();
+        List<String> rotated = new ArrayList<>();
+        for (int i = 0; i < out.size(); i++) rotated.add(out.get((off + i) % out.size()));
+        return trim(rotated);
     }
 
     private void refreshAll() {

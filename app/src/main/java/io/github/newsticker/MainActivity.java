@@ -877,10 +877,15 @@ public final class MainActivity extends Activity {
         formContainer.setVisibility(View.GONE);
         goliContainer.setVisibility(View.VISIBLE);
         editorTitle.setText("Goliardia \u2014 " + (nameBuf.length() == 0 ? "notizie" : nameBuf));
-        refreshGoliList();
+        refreshGoliList(0);
     }
 
-    private void refreshGoliList() {
+    /**
+     * Item rows are built as two SIBLING focusables — [testo][✕] — so the D-pad can
+     * actually reach the delete button (a ✕ inside the row bounds would never get focus).
+     * focusRow: which row to focus after the rebuild (-1 = leave focus alone).
+     */
+    private void refreshGoliList(int focusRow) {
         goliContainer.removeAllViews();
         goliRows.clear();
 
@@ -888,12 +893,9 @@ public final class MainActivity extends Activity {
         ((TextView) add.getChildAt(0)).setTextColor(ACCENT);
         add.setOnClickListener(v -> {
             goliItems.add("");
-            refreshGoliList();
             int idx = goliItems.size() - 1;
-            goliContainer.post(() -> {
-                if (idx < goliRows.size()) goliRows.get(idx).requestFocus();
-                editGoliItem(idx);
-            });
+            refreshGoliList(idx + 1);
+            editGoliItem(idx);
         });
         goliContainer.addView(add, matchWrap());
         goliContainer.addView(divider());
@@ -901,60 +903,93 @@ public final class MainActivity extends Activity {
 
         for (int i = 0; i < goliItems.size(); i++) {
             final int idx = i;
-            LinearLayout row = settingsRow(goliItems.get(i));
-            ((TextView) row.getChildAt(0)).setSingleLine(true);
-            ((TextView) row.getChildAt(0)).setEllipsize(android.text.TextUtils.TruncateAt.START);
-            row.setOnClickListener(v -> editGoliItem(idx));
-            TextView del = text("\u2715", 14, RED, true);
-            del.setPadding(dp(8), 0, dp(2), 0);
+            LinearLayout line = new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            line.setGravity(Gravity.CENTER_VERTICAL);
+
+            LinearLayout main = new LinearLayout(this);
+            main.setOrientation(LinearLayout.HORIZONTAL);
+            main.setGravity(Gravity.CENTER_VERTICAL);
+            main.setPadding(dp(12), 0, dp(8), 0);
+            main.setFocusable(true);
+            main.setClickable(true);
+            main.setLayoutParams(new LinearLayout.LayoutParams(0, dp(38), 1f));
+            boolean empty = goliItems.get(i).trim().isEmpty();
+            TextView t = text(empty ? "(vuota \u2014 premi OK per scriverla)" : goliItems.get(i),
+                    14, empty ? LABEL : TEXT, false);
+            t.setSingleLine(true);
+            t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            main.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            styleGoliMain(main, false);
+            main.setOnFocusChangeListener((v, has) -> styleGoliMain(main, has));
+            main.setOnClickListener(v -> editGoliItem(idx));
+            line.addView(main);
+
+            TextView del = text("\u2715", 15, RED, true);
+            del.setGravity(Gravity.CENTER);
             del.setFocusable(true);
             del.setClickable(true);
+            del.setLayoutParams(new LinearLayout.LayoutParams(dp(52), dp(38)));
+            styleGoliDel(del, false);
+            del.setOnFocusChangeListener((v, has) -> styleGoliDel(del, has));
             del.setOnClickListener(v -> {
                 goliItems.remove(idx);
-                refreshGoliList();
+                refreshGoliList(idx);
+                refreshEditorValues();
             });
-            GradientDrawable db = new GradientDrawable();
-            db.setCornerRadius(dp(8));
-            del.setBackground(db);
-            del.setOnFocusChangeListener((v, has) -> {
-                GradientDrawable d2 = new GradientDrawable();
-                d2.setCornerRadius(dp(8));
-                if (has) {
-                    d2.setColor(CARD_HI);
-                    d2.setStroke(dp(2), RED);
-                } else {
-                    d2.setColor(Color.TRANSPARENT);
-                }
-                del.setBackground(d2);
-            });
-            row.addView(del, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            goliContainer.addView(row, matchWrap());
+            line.addView(del);
+
+            goliContainer.addView(line, matchWrap());
             goliContainer.addView(divider());
-            goliRows.add(row);
+            goliRows.add(main);
         }
 
         LinearLayout done = settingsRow("\u2190 Fatto");
         done.setOnClickListener(v -> backToForm());
-        goliContainer.addView(withTopMargin(done, dp(8)), matchWrap());
+        goliContainer.addView(withTopMargin(done, dp(6)), matchWrap());
+        goliRows.add(done);
 
-        editorPanel.post(() -> {
-            if (!goliRows.isEmpty()) goliRows.get(0).requestFocus();
-        });
+        if (focusRow >= 0 && keyboardPanel.getVisibility() != View.VISIBLE) {
+            editorPanel.post(() -> {
+                if (goliRows.isEmpty()) return;
+                goliRows.get(Math.min(focusRow, goliRows.size() - 1)).requestFocus();
+            });
+        }
     }
 
-    /** Opens the keyboard on one joke; closing writes the text back into the list. */
+    private void styleGoliMain(LinearLayout main, boolean focused) {
+        GradientDrawable bgd = new GradientDrawable();
+        bgd.setCornerRadius(dp(10));
+        if (focused) {
+            bgd.setColor(CARD_HI);
+            bgd.setStroke(dp(2), ACCENT);
+        } else {
+            bgd.setColor(Color.TRANSPARENT);
+        }
+        main.setBackground(bgd);
+    }
+
+    private void styleGoliDel(TextView del, boolean focused) {
+        GradientDrawable bgd = new GradientDrawable();
+        bgd.setCornerRadius(dp(8));
+        if (focused) {
+            bgd.setColor(CARD_HI);
+            bgd.setStroke(dp(2), RED);
+        } else {
+            bgd.setColor(Color.TRANSPARENT);
+        }
+        del.setBackground(bgd);
+    }
+
+    /** Opens the keyboard on one joke; closing writes the text back and refreshes the list. */
     private void editGoliItem(int idx) {
         if (idx < 0 || idx >= goliItems.size()) return;
         goliEditIdx = idx;
         StringBuilder buf = new StringBuilder(goliItems.get(idx));
-        View returnRow = goliRows.get(Math.min(idx + 1, goliRows.size() - 1));
-        showKeyboard(buf, null, "NOTIZIA " + (idx + 1), returnRow, () -> {
+        showKeyboard(buf, null, "NOTIZIA " + (idx + 1), null, () -> {
             String s = buf.toString().trim();
             if (idx < goliItems.size()) goliItems.set(idx, s);
-            if (s.isEmpty() && idx < goliItems.size()) {
-                goliItems.remove(idx);   // emptying a joke deletes it
-            }
+            refreshGoliList(idx + 1);
             refreshEditorValues();
         });
     }
