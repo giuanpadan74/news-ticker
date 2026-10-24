@@ -69,6 +69,7 @@ public final class MainActivity extends Activity {
     private TextView deleteBtn;
     private Topic editingTopic;
     private int editType, slugIdx = 1;
+    private ScrollView mainScroll;
     private final StringBuilder nameBuf = new StringBuilder();
     private final StringBuilder queryBuf = new StringBuilder();
     private StringBuilder keyBuf;
@@ -135,6 +136,7 @@ public final class MainActivity extends Activity {
         columns.addView(rightPane());
 
         FrameLayout frame = new FrameLayout(this);
+        mainScroll = scroll;
         frame.addView(scroll, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         frame.addView(buildEditorPanel(), new FrameLayout.LayoutParams(
@@ -796,10 +798,29 @@ public final class MainActivity extends Activity {
         return editorPanel;
     }
 
+    /** Mentre un overlay è aperto il focus non deve poter scappare nella pagina sottostante. */
+    private void setMainPageFocusable(boolean on) {
+        if (mainScroll != null) {
+            mainScroll.setDescendantFocusability(on
+                    ? ViewGroup.FOCUS_BEFORE_DESCENDANTS
+                    : ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        }
+    }
+
+    private void setEditorFocusable(boolean on) {
+        if (editorPanel != null) {
+            editorPanel.setDescendantFocusability(on
+                    ? ViewGroup.FOCUS_BEFORE_DESCENDANTS
+                    : ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        }
+    }
+
     /** List mode: every category, click opens the form. */
     private void showEditorList() {
+        setMainPageFocusable(false);
         listContainer.setVisibility(View.VISIBLE);
         formContainer.setVisibility(View.GONE);
+        goliContainer.setVisibility(View.GONE);
         editorTitle.setText("Categorie");
         listRows.clear();
         listContainer.removeAllViews();
@@ -831,6 +852,7 @@ public final class MainActivity extends Activity {
 
     /** Form mode for an existing topic or a new one (null). */
     private void showEditorForm(Topic t) {
+        setMainPageFocusable(false);
         editingTopic = t;
         nameBuf.setLength(0);
         queryBuf.setLength(0);
@@ -860,6 +882,7 @@ public final class MainActivity extends Activity {
 
     private void hideEditor() {
         editorPanel.setVisibility(View.GONE);
+        setMainPageFocusable(true);
         if (!leftRows.isEmpty()) leftRows.get(0).requestFocus();
     }
 
@@ -873,6 +896,7 @@ public final class MainActivity extends Activity {
     // ---------- goliardia item list ----------
 
     private void showGoliardia() {
+        setMainPageFocusable(false);
         listContainer.setVisibility(View.GONE);
         formContainer.setVisibility(View.GONE);
         goliContainer.setVisibility(View.VISIBLE);
@@ -1377,6 +1401,7 @@ public final class MainActivity extends Activity {
     /** Keyboard bound to an arbitrary buffer; onClose runs when it closes (item write-back). */
     private void showKeyboard(StringBuilder buf, TextView previewTarget, String title,
                               View returnRow, Runnable onClose) {
+        setEditorFocusable(false);   // le frecce non devono scappare nell'editor dietro
         keyBuf = buf;
         keyPreviewTarget = previewTarget;
         keyReturnRow = returnRow;
@@ -1393,6 +1418,7 @@ public final class MainActivity extends Activity {
 
     private boolean hideKeyboard() {
         keyboardPanel.setVisibility(View.GONE);
+        setEditorFocusable(true);
         if (keyOnClose != null) {
             Runnable r = keyOnClose;
             keyOnClose = null;
