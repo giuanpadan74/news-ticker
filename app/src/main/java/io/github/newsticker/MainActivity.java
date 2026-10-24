@@ -75,6 +75,8 @@ public final class MainActivity extends Activity {
     private TextView keyPreviewTarget;
     private View keyReturnRow;
     private Runnable keyOnClose;
+    private enum KeyKind { LETTER, CHAR, FUNC, RETURN, SHIFT, PAGE, SPACE, OK }
+    private final java.util.HashMap<TextView, KeyKind> keyKinds = new java.util.HashMap<>();
     private View firstKey;
     private LinearLayout tipoRow;
     private final List<LinearLayout> listRows = new ArrayList<>();
@@ -82,6 +84,12 @@ public final class MainActivity extends Activity {
     private TextView capsKey;
     private final List<TextView> letterKeyViews = new ArrayList<>();
     private LinearLayout rssBox;
+
+    // keyboard state (layout italiano, sfondo nero)
+    private boolean shiftOn, capsLock, numPage;
+    private final List<TextView> letterKeys = new ArrayList<>();
+    private TextView shiftKey;
+    private LinearLayout keysBox;
 
     // goliardia editor
     private LinearLayout goliContainer;
@@ -1119,7 +1127,7 @@ public final class MainActivity extends Activity {
     private View buildKeyboardPanel() {
         keyboardPanel = new LinearLayout(this);
         keyboardPanel.setOrientation(LinearLayout.VERTICAL);
-        keyboardPanel.setBackgroundColor(0xF207070A);
+        keyboardPanel.setBackgroundColor(0xFF000000);
         keyboardPanel.setGravity(Gravity.CENTER);
         keyboardPanel.setVisibility(View.GONE);
         keyboardPanel.setPadding(dp(24), dp(16), dp(24), dp(16));
@@ -1130,7 +1138,8 @@ public final class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bgd = new GradientDrawable();
         bgd.setCornerRadius(dp(14));
-        bgd.setColor(CARD);
+        bgd.setColor(0xFF0A0A0C);
+        bgd.setStroke(dp(1), 0xFF2E2E34);
         box.setBackground(bgd);
         box.setPadding(dp(18), dp(12), dp(18), dp(14));
 
@@ -1140,115 +1149,115 @@ public final class MainActivity extends Activity {
         keyPreview = text("", 17, TEXT, true);
         GradientDrawable pv = new GradientDrawable();
         pv.setCornerRadius(dp(8));
-        pv.setColor(0xFF111114);
+        pv.setColor(0xFF101013);
+        pv.setStroke(dp(1), 0xFF2E2E34);
         keyPreview.setBackground(pv);
         keyPreview.setPadding(dp(10), dp(8), dp(10), dp(8));
         keyPreview.setMinHeight(dp(42));
         box.addView(withTopMargin(keyPreview, dp(6)));
 
-        LinearLayout.LayoutParams keyLp = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        keyLp.setMargins(dp(3), dp(4), dp(3), dp(4));
-        LinearLayout line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        for (String s : new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}) {
-            line.addView(makeKey(s, 1, false, null), copyLp(keyLp));
-        }
-        box.addView(withTopMargin(line, dp(4)), matchWrap());
+        keysBox = new LinearLayout(this);
+        keysBox.setOrientation(LinearLayout.VERTICAL);
+        box.addView(withTopMargin(keysBox, dp(8)));
 
-        line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        for (String s : new String[]{"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"}) {
-            line.addView(makeKey(s, 1, true, null), copyLp(keyLp));
-        }
-        box.addView(withTopMargin(line, dp(2)), matchWrap());
-
-        line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        capsKey = makeKey("CAPS", 2, false, this::toggleCaps);
-        line.addView(capsKey, copyLp(keyLp));
-        for (String s : new String[]{"A", "S", "D", "F", "G", "H", "J", "K", "L"}) {
-            line.addView(makeKey(s, 1, true, null), copyLp(keyLp));
-        }
-        box.addView(withTopMargin(line, dp(2)), matchWrap());
-
-        line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        for (String s : new String[]{"Z", "X", "C", "V", "B", "N", "M"}) {
-            line.addView(makeKey(s, 1, true, null), copyLp(keyLp));
-        }
-        line.addView(makeKey("DEL", 2, false, this::delChar), copyLp(keyLp));
-        box.addView(withTopMargin(line, dp(2)), matchWrap());
-
-        line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        line.addView(makeKey("SPAZIO", 4, false, this::typeSpace), copyLp(keyLp));
-        line.addView(makeKey(".", 1, false, null), copyLp(keyLp));
-        line.addView(makeKey("-", 1, false, null), copyLp(keyLp));
-        line.addView(makeKey("'", 1, false, null), copyLp(keyLp));
-        TextView okKey = makeKey("OK", 3, false, this::hideKeyboard);
-        okKey.setTag("OK");
-        styleKey(okKey, false);
-        line.addView(okKey, copyLp(keyLp));
-        box.addView(withTopMargin(line, dp(2)), matchWrap());
-
-        box.addView(withTopMargin(text("Back o OK chiudono la tastiera", 11, LABEL, false), dp(6)));
+        box.addView(withTopMargin(text("Back o ⏎ chiudono la tastiera", 11, LABEL, false), dp(6)));
 
         keyboardPanel.addView(box, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return keyboardPanel;
     }
 
-    private static LinearLayout.LayoutParams copyLp(LinearLayout.LayoutParams src) {
-        return new LinearLayout.LayoutParams(src.width, src.height, src.weight);
-    }
+    /** Rebuilds the key grid for the current page (lettere o &123). */
+    private void buildKeys() {
+        letterKeys.clear();
+        keyKinds.clear();
+        keysBox.removeAllViews();
+        firstKey = null;
+        LinearLayout.LayoutParams kp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        kp.setMargins(dp(3), dp(4), dp(3), dp(4));
 
-    /** One key: letters follow the caps state, everything else types as labelled. */
-    private TextView makeKey(String label, int weight, boolean letter, Runnable action) {
-        TextView k = new TextView(this);
-        k.setTag(label);
-        k.setText(caps && letter ? label : letter ? label.toLowerCase(Locale.ROOT) : label);
-        k.setGravity(Gravity.CENTER);
-        k.setTextSize(label.length() > 1 ? 13 : 17);
-        k.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        k.setTextColor(TEXT);
-        k.setFocusable(true);
-        k.setClickable(true);
-        styleKey(k, false);
-        k.setOnFocusChangeListener((v, has) -> styleKey(k, has));
-        k.setOnClickListener(v -> {
-            if (action != null) action.run();
-            else typeChar(String.valueOf(v.getTag()), letter);
-        });
-        if (letter) letterKeyViews.add(k);
-        if (firstKey == null) firstKey = k;
-        return k;
-    }
+        if (numPage) {
+            LinearLayout r1 = new LinearLayout(this);
+            for (String s : new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}) {
+                r1.addView(makeKey(s, 1, KeyKind.CHAR, null), copyLp(kp));
+            }
+            keysBox.addView(withTopMargin(r1, dp(2)), matchWrap());
 
-    private void styleKey(TextView k, boolean focused) {
-        GradientDrawable bgd = new GradientDrawable();
-        bgd.setCornerRadius(dp(8));
-        boolean isOk = "OK".equals(k.getTag());
-        if (isOk) {
-            bgd.setColor(ACCENT);
-            if (focused) bgd.setStroke(dp(2), 0xFFFFFFFF);
-        } else if (focused) {
-            bgd.setColor(CARD_HI);
-            bgd.setStroke(dp(2), ACCENT);
+            LinearLayout r2 = new LinearLayout(this);
+            for (String s : new String[]{"@", "#", "€", "%", "&", "*", "(", ")", "+", "="}) {
+                r2.addView(makeKey(s, 1, KeyKind.CHAR, null), copyLp(kp));
+            }
+            keysBox.addView(withTopMargin(r2, dp(2)), matchWrap());
+
+            LinearLayout r3 = new LinearLayout(this);
+            for (String s : new String[]{"/", ":", ";", "?", "!", "\"", "'", "_", "-"}) {
+                r3.addView(makeKey(s, 1, KeyKind.CHAR, null), copyLp(kp));
+            }
+            keysBox.addView(withTopMargin(r3, dp(2)), matchWrap());
+
+            LinearLayout r4 = new LinearLayout(this);
+            r4.addView(makeKey("ABC", 2, KeyKind.PAGE, this::togglePage), copyLp(kp));
+            r4.addView(makeKey("_", 1, KeyKind.CHAR, null), copyLp(kp));
+            r4.addView(makeKey("", 6, KeyKind.SPACE, this::typeSpace), copyLp(kp));
+            r4.addView(makeKey(",", 1, KeyKind.CHAR, null), copyLp(kp));
+            r4.addView(makeKey("⌫", 2, KeyKind.FUNC, this::delChar), copyLp(kp));
+            keysBox.addView(withTopMargin(r4, dp(2)), matchWrap());
         } else {
-            bgd.setColor(0xFF2A2A2E);
-            if (k == capsKey && caps) bgd.setStroke(dp(2), ACCENT);
+            LinearLayout r1 = new LinearLayout(this);
+            for (String s : new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "è"}) {
+                r1.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
+            }
+            r1.addView(makeKey("⌫", 1.4f, KeyKind.FUNC, this::delChar), copyLp(kp));
+            keysBox.addView(withTopMargin(r1, dp(2)), matchWrap());
+
+            LinearLayout r2 = new LinearLayout(this);
+            for (String s : new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l", "ò", "à"}) {
+                r2.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
+            }
+            r2.addView(makeKey("⏎", 1.4f, KeyKind.RETURN, this::hideKeyboard), copyLp(kp));
+            keysBox.addView(withTopMargin(r2, dp(2)), matchWrap());
+
+            LinearLayout r3 = new LinearLayout(this);
+            shiftKey = makeKey("↑", 1.4f, KeyKind.SHIFT, this::tapShift);
+            r3.addView(shiftKey, copyLp(kp));
+            for (String s : new String[]{"z", "x", "c", "v", "b", "n", "m", "ù", ",", ".", "'"}) {
+                r3.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
+            }
+            keysBox.addView(withTopMargin(r3, dp(2)), matchWrap());
+
+            LinearLayout r4 = new LinearLayout(this);
+            r4.addView(makeKey("&123", 2, KeyKind.PAGE, this::togglePage), copyLp(kp));
+            r4.addView(makeKey("", 7, KeyKind.SPACE, this::typeSpace), copyLp(kp));
+            r4.addView(makeKey("OK", 2, KeyKind.OK, this::hideKeyboard), copyLp(kp));
+            keysBox.addView(withTopMargin(r4, dp(2)), matchWrap());
         }
-        k.setBackground(bgd);
-        k.setTextColor(isOk ? 0xFF151515 : TEXT);
+        relabelLetters();
     }
 
-    private void toggleCaps() {
-        caps = !caps;
-        for (TextView k : letterKeyViews) {
-            String up = (String) k.getTag();
-            k.setText(caps ? up : up.toLowerCase(Locale.ROOT));
+    private void relabelLetters() {
+        boolean up = shiftOn || capsLock;
+        for (TextView k : letterKeys) {
+            k.setText(up ? ((String) k.getTag()).toUpperCase(Locale.ROOT)
+                    : (String) k.getTag());
         }
-        styleKey(capsKey, capsKey.isFocused());
+        if (shiftKey != null) styleKey(shiftKey, shiftKey.isFocused());
+    }
+
+    /** ↑: tap = maiuscola a uno colpo, secondo tap = blocco maiuscole, terzo = rilascia. */
+    private void tapShift() {
+        if (!shiftOn && !capsLock) shiftOn = true;
+        else if (shiftOn && !capsLock) capsLock = true;
+        else {
+            capsLock = false;
+            shiftOn = false;
+        }
+        relabelLetters();
+    }
+
+    private void togglePage() {
+        numPage = !numPage;
+        buildKeys();
+        keysBox.post(() -> { if (firstKey != null) firstKey.requestFocus(); });
     }
 
     private void typeSpace() {
@@ -1257,6 +1266,77 @@ public final class MainActivity extends Activity {
 
     private void delChar() {
         typeChar("DEL", false);
+    }
+
+    private static LinearLayout.LayoutParams copyLp(LinearLayout.LayoutParams src) {
+        return new LinearLayout.LayoutParams(src.width, src.height, src.weight);
+    }
+
+    private TextView makeKey(String base, float weight, KeyKind kind, Runnable action) {
+        TextView k = new TextView(this);
+        k.setTag(base);
+        keyKinds.put(k, kind);
+        k.setText(base);
+        k.setGravity(Gravity.CENTER);
+        k.setTextSize(base.isEmpty() ? 13 : base.length() > 1 ? 13 : 18);
+        k.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        k.setFocusable(true);
+        k.setClickable(true);
+        styleKey(k, false);
+        k.setOnFocusChangeListener((v, has) -> styleKey(k, has));
+        k.setOnClickListener(v -> {
+            if (action != null) { action.run(); return; }
+            switch (kind) {
+                case LETTER:
+                    typeLetter(k);
+                    break;
+                case CHAR:
+                    typeChar(base, false);
+                    break;
+                default:
+                    break;
+            }
+        });
+        if (firstKey == null) firstKey = k;
+        return k;
+    }
+
+    private void typeLetter(TextView k) {
+        String base = (String) k.getTag();
+        typeChar(shiftOn || capsLock ? base.toUpperCase(Locale.ROOT) : base, false);
+        if (shiftOn && !capsLock) {          // one-shot shift used up
+            shiftOn = false;
+            relabelLetters();
+        }
+    }
+
+    private void styleKey(TextView k, boolean focused) {
+        KeyKind kind = keyKinds.get(k);
+        if (kind == null) kind = KeyKind.CHAR;
+        GradientDrawable bgd = new GradientDrawable();
+        bgd.setCornerRadius(dp(8));
+        int textColor = TEXT;
+        if (kind == KeyKind.OK) {
+            bgd.setColor(ACCENT);
+            textColor = 0xFF151515;
+            if (focused) bgd.setStroke(dp(2), 0xFFFFFFFF);
+        } else if (focused) {
+            bgd.setColor(0xFFFFFFFF);
+            textColor = 0xFF000000;
+        } else if (kind == KeyKind.FUNC || kind == KeyKind.SHIFT || kind == KeyKind.PAGE
+                || kind == KeyKind.RETURN || kind == KeyKind.SPACE) {
+            bgd.setColor(0xFF17171B);
+            bgd.setStroke(dp(1), 0xFF3A3A40);
+        } else {
+            bgd.setColor(0xFF141418);
+            bgd.setStroke(dp(1), 0xFF2E2E34);
+        }
+        if (kind == KeyKind.SHIFT && k == shiftKey && (shiftOn || capsLock) && !focused) {
+            bgd.setStroke(dp(2), ACCENT);       // shift attivo
+            if (capsLock) bgd.setColor(0xFFFFFFFF);
+        }
+        k.setBackground(bgd);
+        k.setTextColor(textColor);
     }
 
     /** Keyboard bound to an arbitrary buffer; onClose runs when it closes (item write-back). */
@@ -1268,6 +1348,10 @@ public final class MainActivity extends Activity {
         keyOnClose = onClose;
         keyTitle.setText(title);
         keyPreview.setText(buf);
+        shiftOn = false;
+        capsLock = false;
+        numPage = false;
+        buildKeys();
         keyboardPanel.setVisibility(View.VISIBLE);
         if (firstKey != null) firstKey.requestFocus();
     }
