@@ -106,6 +106,7 @@ final class Prefs {
     static List<Feed> allFeeds(Context c) {
         List<Feed> out = new ArrayList<>();
         for (Topic t : allTopics(c)) out.add(t.toFeed());
+        out.sort((a, b) -> a.name.compareToIgnoreCase(b.name));   // home sempre in ordine alfabetico
         return out;
     }
 

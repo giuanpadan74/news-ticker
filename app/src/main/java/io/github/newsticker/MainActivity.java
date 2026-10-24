@@ -81,9 +81,6 @@ public final class MainActivity extends Activity {
     private View firstKey;
     private LinearLayout tipoRow;
     private final List<LinearLayout> listRows = new ArrayList<>();
-    private boolean caps = true;
-    private TextView capsKey;
-    private final List<TextView> letterKeyViews = new ArrayList<>();
     private LinearLayout rssBox;
 
     // keyboard state (layout italiano, sfondo nero)
@@ -91,6 +88,8 @@ public final class MainActivity extends Activity {
     private final List<TextView> letterKeys = new ArrayList<>();
     private TextView shiftKey;
     private LinearLayout keysBox;
+    private enum KeyFmt { NONE, NAME, SENTENCE }
+    private KeyFmt keyFmt = KeyFmt.NONE;
 
     // goliardia editor
     private LinearLayout goliContainer;
@@ -524,7 +523,7 @@ public final class MainActivity extends Activity {
         scheduleRefresh();
     }
 
-    /** Weight step; VOL GIÙ below the minimum switches the topic off for good. */
+    /** Weight step; VOL GIÃ™ below the minimum switches the topic off for good. */
     private void bumpWeight(LinearLayout cell, int delta) {
         RowRefs refs = (RowRefs) cell.getTag();
         List<String> sel = new ArrayList<>(Prefs.selection(this));
@@ -747,7 +746,7 @@ public final class MainActivity extends Activity {
         nomeVal = text("", 14, LABEL, true);
         setAccessory(nomeRow, nomeVal);
         nomeRow.addView(text("  \u203A", 16, LABEL, false));
-        nomeRow.setOnClickListener(v -> showKeyboard(nameBuf, nomeVal, "NOME", nomeRow, null));
+        nomeRow.setOnClickListener(v -> showKeyboard(nameBuf, nomeVal, "NOME", nomeRow, null, KeyFmt.NAME));
         form.addView(nomeRow);
         form.addView(divider());
 
@@ -758,7 +757,7 @@ public final class MainActivity extends Activity {
         queryRow.setOnClickListener(v -> {
             if (TYPE_KEYS[editType].equals(Topic.ANSA)) cycleSlug();
             else if (TYPE_KEYS[editType].equals(Topic.GOLIARDIA)) showGoliardia();
-            else showKeyboard(queryBuf, queryVal, QUERY_LABELS[editType], queryRow, null);
+            else showKeyboard(queryBuf, queryVal, QUERY_LABELS[editType], queryRow, null, KeyFmt.NONE);
         });
         form.addView(queryRow);
         formContainer.addView(withTopMargin(form, dp(8)));
@@ -798,7 +797,7 @@ public final class MainActivity extends Activity {
         return editorPanel;
     }
 
-    /** Mentre un overlay è aperto il focus non deve poter scappare nella pagina sottostante. */
+    /** Mentre un overlay Ã¨ aperto il focus non deve poter scappare nella pagina sottostante. */
     private void setMainPageFocusable(boolean on) {
         if (mainScroll != null) {
             mainScroll.setDescendantFocusability(on
@@ -825,6 +824,9 @@ public final class MainActivity extends Activity {
         listRows.clear();
         listContainer.removeAllViews();
 
+        List<Topic> ts = new ArrayList<>(Prefs.allTopics(this));
+        ts.sort((a, b) -> a.name.compareToIgnoreCase(b.name));   // stesso ordine della home
+
         LinearLayout addRow = settingsRow("+ Nuova categoria");
         ((TextView) addRow.getChildAt(0)).setTextColor(ACCENT);
         addRow.setOnClickListener(v -> showEditorForm(null));
@@ -832,7 +834,7 @@ public final class MainActivity extends Activity {
         listContainer.addView(addRow, matchWrap());
         listContainer.addView(divider());
 
-        for (Topic t : Prefs.allTopics(this)) {
+        for (Topic t : ts) {
             LinearLayout row = settingsRow(t.name);
             String src = Topic.ANSA.equals(t.type) ? "ANSA" : Topic.RSS.equals(t.type) ? "RSS"
                     : Topic.GOLIARDIA.equals(t.type) ? "Goliardia" : "Google";
@@ -869,6 +871,19 @@ public final class MainActivity extends Activity {
             slugIdx = 1;
             for (int i = 0; i < SLUGS.length; i++) if (SLUGS[i].equals(t.q)) slugIdx = i;
             goliItems.addAll(t.items);
+            // corregge giÃ  al caricamento: iniziale maiuscola
+            for (int i = 0; i < goliItems.size(); i++) {
+                String it = goliItems.get(i);
+                if (!it.isEmpty()) goliItems.set(i,
+                        Character.toUpperCase(it.charAt(0)) + it.substring(1));
+            }
+        }
+        // e anche per il nome della categoria
+        if (nameBuf.length() > 0) {
+            String n = nameBuf.substring(0, 1).toUpperCase(Locale.ROOT)
+                    + nameBuf.substring(1).toLowerCase(Locale.ROOT);
+            nameBuf.setLength(0);
+            nameBuf.append(n);
         }
         editorTitle.setText(t == null ? "Nuova categoria" : "Modifica: " + t.name);
         deleteBtn.setVisibility(t == null ? View.GONE : View.VISIBLE);
@@ -905,8 +920,8 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Item rows are built as two SIBLING focusables — [testo][✕] — so the D-pad can
-     * actually reach the delete button (a ✕ inside the row bounds would never get focus).
+     * Item rows are built as two SIBLING focusables â€” [testo][âœ•] â€” so the D-pad can
+     * actually reach the delete button (a âœ• inside the row bounds would never get focus).
      * focusRow: which row to focus after the rebuild (-1 = leave focus alone).
      */
     private void refreshGoliList(int focusRow) {
@@ -1015,7 +1030,7 @@ public final class MainActivity extends Activity {
             if (idx < goliItems.size()) goliItems.set(idx, s);
             refreshGoliList(idx + 1);
             refreshEditorValues();
-        });
+        }, KeyFmt.SENTENCE);
     }
 
     private void backToForm() {
@@ -1112,6 +1127,9 @@ public final class MainActivity extends Activity {
 
     private void saveTopic() {
         String name = nameBuf.toString().trim();
+        if (!name.isEmpty()) {
+            name = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1).toLowerCase(Locale.ROOT);
+        }
         String type = TYPE_KEYS[editType];
         String q = queryBuf.toString().trim();
         if (name.isEmpty()) {
@@ -1134,24 +1152,25 @@ public final class MainActivity extends Activity {
         }
         List<Topic> ts = new ArrayList<>(Prefs.allTopics(this));
         // rename: carry selection and weight over to the new name
+        final String newName = name;   // le lambda richiedono una variabile final
         String oldName = editingTopic == null ? null : editingTopic.name;
-        if (oldName != null && !oldName.equals(name)) {
+        if (oldName != null && !oldName.equals(newName)) {
             int w = Prefs.weight(this, oldName);
-            Prefs.setWeight(this, name, w);
+            Prefs.setWeight(this, newName, w);
             List<String> sel = new ArrayList<>(Prefs.selection(this));
             if (sel.contains(oldName)) {
                 sel.remove(oldName);
-                if (!sel.contains(name)) sel.add(name);
+                if (!sel.contains(newName)) sel.add(newName);
                 Prefs.setSelection(this, sel);
             }
         }
         if (oldName != null) ts.removeIf(t -> t.name.equals(oldName));
-        ts.removeIf(t -> t.name.equals(name));
-        ts.add(new Topic(name, type, q, items));
+        ts.removeIf(t -> t.name.equals(newName));
+        ts.add(new Topic(newName, type, q, items));
         Prefs.setAllTopics(this, ts);
 
         List<String> sel2 = new ArrayList<>(Prefs.selection(this));
-        if (!sel2.contains(name)) sel2.add(name);
+        if (!sel2.contains(newName)) sel2.add(newName);
         Prefs.setSelection(this, sel2);
 
         showEditorList();
@@ -1219,7 +1238,7 @@ public final class MainActivity extends Activity {
         keysBox.setOrientation(LinearLayout.VERTICAL);
         box.addView(withTopMargin(keysBox, dp(8)));
 
-        box.addView(withTopMargin(text("Back o ⏎ chiudono la tastiera", 11, LABEL, false), dp(6)));
+        box.addView(withTopMargin(text("Back o âŽ chiudono la tastiera", 11, LABEL, false), dp(6)));
 
         keyboardPanel.addView(box, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1243,7 +1262,7 @@ public final class MainActivity extends Activity {
             keysBox.addView(withTopMargin(r1, dp(2)), matchWrap());
 
             LinearLayout r2 = new LinearLayout(this);
-            for (String s : new String[]{"@", "#", "€", "%", "&", "*", "(", ")", "+", "="}) {
+            for (String s : new String[]{"@", "#", "â‚¬", "%", "&", "*", "(", ")", "+", "="}) {
                 r2.addView(makeKey(s, 1, KeyKind.CHAR, null), copyLp(kp));
             }
             keysBox.addView(withTopMargin(r2, dp(2)), matchWrap());
@@ -1259,27 +1278,27 @@ public final class MainActivity extends Activity {
             r4.addView(makeKey("_", 1, KeyKind.CHAR, null), copyLp(kp));
             r4.addView(makeKey("", 6, KeyKind.SPACE, this::typeSpace), copyLp(kp));
             r4.addView(makeKey(",", 1, KeyKind.CHAR, null), copyLp(kp));
-            r4.addView(makeKey("⌫", 2, KeyKind.FUNC, this::delChar), copyLp(kp));
+            r4.addView(makeKey("âŒ«", 2, KeyKind.FUNC, this::delChar), copyLp(kp));
             keysBox.addView(withTopMargin(r4, dp(2)), matchWrap());
         } else {
             LinearLayout r1 = new LinearLayout(this);
-            for (String s : new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "è"}) {
+            for (String s : new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "Ã¨"}) {
                 r1.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
             }
-            r1.addView(makeKey("⌫", 1.4f, KeyKind.FUNC, this::delChar), copyLp(kp));
+            r1.addView(makeKey("âŒ«", 1.4f, KeyKind.FUNC, this::delChar), copyLp(kp));
             keysBox.addView(withTopMargin(r1, dp(2)), matchWrap());
 
             LinearLayout r2 = new LinearLayout(this);
-            for (String s : new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l", "ò", "à"}) {
+            for (String s : new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l", "Ã²", "Ã "}) {
                 r2.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
             }
-            r2.addView(makeKey("⏎", 1.4f, KeyKind.RETURN, this::hideKeyboard), copyLp(kp));
+            r2.addView(makeKey("âŽ", 1.4f, KeyKind.RETURN, this::hideKeyboard), copyLp(kp));
             keysBox.addView(withTopMargin(r2, dp(2)), matchWrap());
 
             LinearLayout r3 = new LinearLayout(this);
-            shiftKey = makeKey("↑", 1.4f, KeyKind.SHIFT, this::tapShift);
+            shiftKey = makeKey("â†‘", 1.4f, KeyKind.SHIFT, this::tapShift);
             r3.addView(shiftKey, copyLp(kp));
-            for (String s : new String[]{"z", "x", "c", "v", "b", "n", "m", "ù", ",", ".", "'"}) {
+            for (String s : new String[]{"z", "x", "c", "v", "b", "n", "m", "Ã¹", ",", ".", "'"}) {
                 r3.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
             }
             keysBox.addView(withTopMargin(r3, dp(2)), matchWrap());
@@ -1302,7 +1321,7 @@ public final class MainActivity extends Activity {
         if (shiftKey != null) styleKey(shiftKey, shiftKey.isFocused());
     }
 
-    /** ↑: tap = maiuscola a uno colpo, secondo tap = blocco maiuscole, terzo = rilascia. */
+    /** â†‘: tap = maiuscola a uno colpo, secondo tap = blocco maiuscole, terzo = rilascia. */
     private void tapShift() {
         if (!shiftOn && !capsLock) shiftOn = true;
         else if (shiftOn && !capsLock) capsLock = true;
@@ -1320,11 +1339,11 @@ public final class MainActivity extends Activity {
     }
 
     private void typeSpace() {
-        typeChar(" ", false);
+        typeChar(" ");
     }
 
     private void delChar() {
-        typeChar("DEL", false);
+        typeChar("DEL");
     }
 
     private static LinearLayout.LayoutParams copyLp(LinearLayout.LayoutParams src) {
@@ -1336,6 +1355,7 @@ public final class MainActivity extends Activity {
         k.setTag(base);
         keyKinds.put(k, kind);
         k.setText(base);
+        if (kind == KeyKind.LETTER) letterKeys.add(k);   // per ridisegnare maiuscole/minuscole allo shift
         k.setGravity(Gravity.CENTER);
         k.setTextSize(base.isEmpty() ? 13 : base.length() > 1 ? 13 : 18);
         k.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -1350,7 +1370,7 @@ public final class MainActivity extends Activity {
                     typeLetter(k);
                     break;
                 case CHAR:
-                    typeChar(base, false);
+                    typeChar(base);
                     break;
                 default:
                     break;
@@ -1362,7 +1382,7 @@ public final class MainActivity extends Activity {
 
     private void typeLetter(TextView k) {
         String base = (String) k.getTag();
-        typeChar(shiftOn || capsLock ? base.toUpperCase(Locale.ROOT) : base, false);
+        typeChar(shiftOn || capsLock ? base.toUpperCase(Locale.ROOT) : base);
         if (shiftOn && !capsLock) {          // one-shot shift used up
             shiftOn = false;
             relabelLetters();
@@ -1400,12 +1420,14 @@ public final class MainActivity extends Activity {
 
     /** Keyboard bound to an arbitrary buffer; onClose runs when it closes (item write-back). */
     private void showKeyboard(StringBuilder buf, TextView previewTarget, String title,
-                              View returnRow, Runnable onClose) {
+                              View returnRow, Runnable onClose, KeyFmt fmt) {
         setEditorFocusable(false);   // le frecce non devono scappare nell'editor dietro
         keyBuf = buf;
         keyPreviewTarget = previewTarget;
         keyReturnRow = returnRow;
         keyOnClose = onClose;
+        keyFmt = fmt;
+        applyKeyFormat();
         keyTitle.setText(title);
         keyPreview.setText(buf);
         shiftOn = false;
@@ -1428,17 +1450,37 @@ public final class MainActivity extends Activity {
         return true;
     }
 
-    private void typeChar(String ch, boolean respectCase) {
+    private void typeChar(String ch) {
         if ("DEL".equals(ch)) {
             if (keyBuf.length() > 0) keyBuf.deleteCharAt(keyBuf.length() - 1);
         } else if (" ".equals(ch)) {
             if (keyBuf.length() == 0 || keyBuf.charAt(keyBuf.length() - 1) != ' ') keyBuf.append(' ');
         } else {
-            keyBuf.append(respectCase && !caps ? ch.toLowerCase(Locale.ROOT) : ch);
+            keyBuf.append(ch);
         }
+        applyKeyFormat();
         keyPreview.setText(keyBuf);
         if (keyPreviewTarget != null) keyPreviewTarget.setText(
                 keyBuf.length() == 0 ? "\u2014" : keyBuf.toString());
+    }
+
+    /** Formato live: NOME = iniziale maiuscola + resto minuscolo; SENTENCE = solo l'iniziale. */
+    private void applyKeyFormat() {
+        if (keyFmt == KeyFmt.NAME) {
+            String s = keyBuf.toString().replaceAll("^ +", "");
+            if (!s.isEmpty()) {
+                s = s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1).toLowerCase(Locale.ROOT);
+            }
+            keyBuf.setLength(0);
+            keyBuf.append(s);
+        } else if (keyFmt == KeyFmt.SENTENCE) {
+            for (int i = 0; i < keyBuf.length(); i++) {
+                if (keyBuf.charAt(i) != ' ') {
+                    keyBuf.setCharAt(i, Character.toUpperCase(keyBuf.charAt(i)));
+                    break;
+                }
+            }
+        }
     }
 
     /** One cell's state: feed plus the views restyled on focus/prefs changes. */
