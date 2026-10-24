@@ -891,6 +891,7 @@ public final class MainActivity extends Activity {
         formContainer.setVisibility(View.VISIBLE);
         editorNote.setText(" ");
         refreshEditorValues();
+        if (TYPE_KEYS[editType].equals(Topic.RSS)) refreshRssList();
         editorPanel.setVisibility(View.VISIBLE);
         editorPanel.post(() -> tipoRow.requestFocus());
     }
@@ -1052,8 +1053,11 @@ public final class MainActivity extends Activity {
         ((TextView) queryRow.getChildAt(0)).setText(QUERY_LABELS[editType]);
         boolean rss = TYPE_KEYS[editType].equals(Topic.RSS);
         rssBox.setVisibility(rss ? View.VISIBLE : View.GONE);
-        if (rss) refreshRssList();
+        // NOTA: niente refreshRssList() qui — ricostruire l'elenco dentro un click
+        // distruggerebbe la riga focalizzata e il D-pad morirebbe ("si blocca")
     }
+
+    private int rssFocusIdx = -1;
 
     /** The curated Italian feeds: click compiles URL (and name, if empty). */
     private void refreshRssList() {
@@ -1064,7 +1068,9 @@ public final class MainActivity extends Activity {
         head.setPadding(dp(6), dp(8), 0, dp(4));
         rssBox.addView(head, matchWrap());
 
-        for (String[] p : dir) {
+        for (int i = 0; i < dir.size(); i++) {
+            final int idx = i;
+            String[] p = dir.get(i);
             LinearLayout row = settingsRow(p[0]);
             setAccessory(row, text("usa \u203A", 12, ACCENT, false));
             row.setOnClickListener(v -> {
@@ -1074,8 +1080,19 @@ public final class MainActivity extends Activity {
                 refreshEditorValues();
                 editorNote.setText("URL inserito: regola il nome se vuoi, poi Salva.");
             });
+            row.setOnFocusChangeListener((v, has) -> { if (has) rssFocusIdx = idx; });
             rssBox.addView(row, matchWrap());
             rssBox.addView(divider());
+        }
+
+        // il rebuild non deve far perdere il focus: lo ripristina sulla voce selezionata
+        if (rssFocusIdx >= 0 && keyboardPanel.getVisibility() != View.VISIBLE) {
+            editorPanel.post(() -> {
+                if (rssBox.getChildCount() < 1) return;
+                int child = 1 + 2 * Math.min(rssFocusIdx, dir.size() - 1);   // righe a passo 2 dopo l'header
+                View row = rssBox.getChildAt(child);
+                if (row != null) row.requestFocus();
+            });
         }
     }
 
@@ -1114,6 +1131,7 @@ public final class MainActivity extends Activity {
         if (TYPE_KEYS[editType].equals(Topic.GOLIARDIA) && goliItems.isEmpty()) {
             for (String s : GOLI_SAMPLES) goliItems.add(s);   // start with a few jokes
         }
+        if (TYPE_KEYS[editType].equals(Topic.RSS)) refreshRssList();
         editorNote.setText(" ");
         refreshEditorValues();
     }
