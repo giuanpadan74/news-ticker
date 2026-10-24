@@ -109,6 +109,14 @@ final class Prefs {
         return out;
     }
 
+    /** The joke headlines of one GOLIARDIA category (empty when missing or other type). */
+    static List<String> goliardiaTitles(Context c, String categoryName) {
+        for (Topic t : allTopics(c)) {
+            if (t.name.equals(categoryName) && Topic.GOLIARDIA.equals(t.type)) return t.items;
+        }
+        return new ArrayList<>();
+    }
+
     // ---------- editable catalog ----------
 
     /** All categories; first run seeds the 18 built-ins, then the user owns them. */
@@ -124,7 +132,12 @@ final class Prefs {
             JSONArray a = new JSONArray(raw);
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
-                out.add(new Topic(o.getString("n"), o.optString("t", Topic.GNEWS), o.optString("q")));
+                Topic t = new Topic(o.getString("n"), o.optString("t", Topic.GNEWS), o.optString("q"));
+                JSONArray items = o.optJSONArray("i");
+                if (items != null) {
+                    for (int j = 0; j < items.length(); j++) t.items.add(items.getString(j));
+                }
+                out.add(t);
             }
         } catch (Exception ignored) {}
         if (out.isEmpty()) {
@@ -142,6 +155,11 @@ final class Prefs {
                 o.put("n", t.name);
                 o.put("t", t.type);
                 o.put("q", t.q);
+                if (Topic.GOLIARDIA.equals(t.type)) {
+                    JSONArray items = new JSONArray();
+                    for (String s : t.items) items.put(s);
+                    o.put("i", items);
+                }
                 a.put(o);
             }
         } catch (Exception ignored) {}

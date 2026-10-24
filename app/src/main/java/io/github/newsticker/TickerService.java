@@ -105,6 +105,18 @@ public final class TickerService extends Service {
 
     // ---------- refresh ----------
 
+    private int goliRotate;   // rotates the joke list so the order changes at every refresh
+
+    /** Jokes for one GOLIARDIA feed, rotated by refresh count; capped like network feeds. */
+    private List<String> goliardiaBatch(String name) {
+        List<String> all = Prefs.goliardiaTitles(this, name);
+        if (all.isEmpty()) return all;
+        List<String> out = new ArrayList<>();
+        int off = goliRotate++ % all.size();
+        for (int i = 0; i < all.size(); i++) out.add(all.get((off + i) % all.size()));
+        return trim(out);
+    }
+
     private void refreshAll() {
         List<Feed> feeds = Prefs.activeFeeds(this);
         int n = feeds.size();
@@ -114,7 +126,13 @@ public final class TickerService extends Service {
         for (Feed f : feeds) {
             weights.add(Prefs.weight(this, f.name));
             try {
-                fetched.add(trim(RssFetcher.titles(f.url, MAX_PER_FEED)));
+                List<String> t;
+                if (Topic.GOLIARDIA.equals(f.source)) {
+                    t = goliardiaBatch(f.name);   // no network: the stored joke list
+                } else {
+                    t = trim(RssFetcher.titles(f.url, MAX_PER_FEED));
+                }
+                fetched.add(trim(t));
                 anyFound |= !fetched.get(fetched.size() - 1).isEmpty();
             } catch (Exception e) {
                 fetched.add(null);   // keep the strip with what we already had on screen

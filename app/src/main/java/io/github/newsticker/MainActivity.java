@@ -68,9 +68,13 @@ public final class MainActivity extends Activity {
     private TextView editorTitle, editorNote, tipoVal, nomeVal, queryVal, keyTitle, keyPreview;
     private TextView deleteBtn;
     private Topic editingTopic;
-    private int editType, slugIdx = 1, keyTargetId;
+    private int editType, slugIdx = 1;
     private final StringBuilder nameBuf = new StringBuilder();
     private final StringBuilder queryBuf = new StringBuilder();
+    private StringBuilder keyBuf;
+    private TextView keyPreviewTarget;
+    private View keyReturnRow;
+    private Runnable keyOnClose;
     private View firstKey;
     private LinearLayout tipoRow;
     private final List<LinearLayout> listRows = new ArrayList<>();
@@ -79,11 +83,23 @@ public final class MainActivity extends Activity {
     private final List<TextView> letterKeyViews = new ArrayList<>();
     private LinearLayout rssBox;
 
-    private static final String[] TYPE_LABELS = {"Google News", "Sezione ANSA", "RSS"};
-    private static final String[] TYPE_KEYS = {Topic.GNEWS, Topic.ANSA, Topic.RSS};
-    private static final String[] QUERY_LABELS = {"Termini di ricerca", "Sezione ANSA", "URL del feed"};
+    // goliardia editor
+    private LinearLayout goliContainer;
+    private final List<String> goliItems = new ArrayList<>();
+    private int goliEditIdx = -1;
+    private final List<LinearLayout> goliRows = new ArrayList<>();
+
+    private static final String[] TYPE_LABELS = {"Google News", "Sezione ANSA", "RSS", "Goliardia"};
+    private static final String[] TYPE_KEYS = {Topic.GNEWS, Topic.ANSA, Topic.RSS, Topic.GOLIARDIA};
+    private static final String[] QUERY_LABELS =
+            {"Termini di ricerca", "Sezione ANSA", "URL del feed", "Notizie inventate"};
     private static final String[] SLUGS =
             {"topnews", "cronaca", "politica", "economia", "mondo", "sport", "cultura", "scienza"};
+    private static final String[] GOLI_SAMPLES = {
+            "Svincolato il fantasma dello stadio: nessun club ha voglia di prenderlo",
+            "Tifo organizzato in biblioteca: 300 studenti zitti per 8 ore",
+            "Il robot aspirapolvere del dipartimento si candida al senato accademico",
+    };
 
     @Override
     protected void onCreate(Bundle b) {
@@ -130,6 +146,8 @@ public final class MainActivity extends Activity {
     public void onBackPressed() {
         if (keyboardPanel != null && keyboardPanel.getVisibility() == View.VISIBLE) {
             hideKeyboard();
+        } else if (goliContainer != null && goliContainer.getVisibility() == View.VISIBLE) {
+            backToForm();
         } else if (editorPanel != null && editorPanel.getVisibility() == View.VISIBLE) {
             hideEditor();
         } else if (editingCell != null) {
@@ -401,6 +419,8 @@ public final class MainActivity extends Activity {
         row.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(38)));
         TextView t = text(title, 15, TEXT, false);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
         row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         row.setOnFocusChangeListener((v, has) -> {
             GradientDrawable bgd = new GradientDrawable();
@@ -717,7 +737,7 @@ public final class MainActivity extends Activity {
         nomeVal = text("", 14, LABEL, true);
         setAccessory(nomeRow, nomeVal);
         nomeRow.addView(text("  \u203A", 16, LABEL, false));
-        nomeRow.setOnClickListener(v -> showKeyboard(0));
+        nomeRow.setOnClickListener(v -> showKeyboard(nameBuf, nomeVal, "NOME", nomeRow, null));
         form.addView(nomeRow);
         form.addView(divider());
 
@@ -727,7 +747,8 @@ public final class MainActivity extends Activity {
         queryRow.addView(text("  \u203A", 16, LABEL, false));
         queryRow.setOnClickListener(v -> {
             if (TYPE_KEYS[editType].equals(Topic.ANSA)) cycleSlug();
-            else showKeyboard(1);
+            else if (TYPE_KEYS[editType].equals(Topic.GOLIARDIA)) showGoliardia();
+            else showKeyboard(queryBuf, queryVal, QUERY_LABELS[editType], queryRow, null);
         });
         form.addView(queryRow);
         formContainer.addView(withTopMargin(form, dp(8)));
@@ -759,6 +780,11 @@ public final class MainActivity extends Activity {
         esc.addView(content, matchWrap());
         editorPanel.addView(esc, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        goliContainer = new LinearLayout(this);
+        goliContainer.setOrientation(LinearLayout.VERTICAL);
+        goliContainer.setVisibility(View.GONE);
+        content.addView(goliContainer, matchWrap());
         return editorPanel;
     }
 
@@ -779,7 +805,8 @@ public final class MainActivity extends Activity {
 
         for (Topic t : Prefs.allTopics(this)) {
             LinearLayout row = settingsRow(t.name);
-            String src = Topic.ANSA.equals(t.type) ? "ANSA" : Topic.RSS.equals(t.type) ? "RSS" : "Google";
+            String src = Topic.ANSA.equals(t.type) ? "ANSA" : Topic.RSS.equals(t.type) ? "RSS"
+                    : Topic.GOLIARDIA.equals(t.type) ? "Goliardia" : "Google";
             setAccessory(row, text(src, 12, LABEL, false));
             row.setOnClickListener(v -> showEditorForm(t));
             listRows.add(row);
@@ -799,15 +826,19 @@ public final class MainActivity extends Activity {
         editingTopic = t;
         nameBuf.setLength(0);
         queryBuf.setLength(0);
+        goliItems.clear();
+        keyOnClose = null;
         if (t == null) {
             editType = 0;
             slugIdx = 1;
         } else {
             nameBuf.append(t.name);
             queryBuf.append(t.q);
-            editType = Topic.ANSA.equals(t.type) ? 1 : Topic.RSS.equals(t.type) ? 2 : 0;
+            editType = Topic.ANSA.equals(t.type) ? 1 : Topic.RSS.equals(t.type) ? 2
+                    : Topic.GOLIARDIA.equals(t.type) ? 3 : 0;
             slugIdx = 1;
             for (int i = 0; i < SLUGS.length; i++) if (SLUGS[i].equals(t.q)) slugIdx = i;
+            goliItems.addAll(t.items);
         }
         editorTitle.setText(t == null ? "Nuova categoria" : "Modifica: " + t.name);
         deleteBtn.setVisibility(t == null ? View.GONE : View.VISIBLE);
@@ -831,10 +862,111 @@ public final class MainActivity extends Activity {
         showEditorForm(t != null ? t : new Topic(f.name, Topic.GNEWS, ""));
     }
 
+    // ---------- goliardia item list ----------
+
+    private void showGoliardia() {
+        listContainer.setVisibility(View.GONE);
+        formContainer.setVisibility(View.GONE);
+        goliContainer.setVisibility(View.VISIBLE);
+        editorTitle.setText("Goliardia \u2014 " + (nameBuf.length() == 0 ? "notizie" : nameBuf));
+        refreshGoliList();
+    }
+
+    private void refreshGoliList() {
+        goliContainer.removeAllViews();
+        goliRows.clear();
+
+        LinearLayout add = settingsRow("+ Aggiungi notizia");
+        ((TextView) add.getChildAt(0)).setTextColor(ACCENT);
+        add.setOnClickListener(v -> {
+            goliItems.add("");
+            refreshGoliList();
+            int idx = goliItems.size() - 1;
+            goliContainer.post(() -> {
+                if (idx < goliRows.size()) goliRows.get(idx).requestFocus();
+                editGoliItem(idx);
+            });
+        });
+        goliContainer.addView(add, matchWrap());
+        goliContainer.addView(divider());
+        goliRows.add(add);
+
+        for (int i = 0; i < goliItems.size(); i++) {
+            final int idx = i;
+            LinearLayout row = settingsRow(goliItems.get(i));
+            ((TextView) row.getChildAt(0)).setSingleLine(true);
+            ((TextView) row.getChildAt(0)).setEllipsize(android.text.TextUtils.TruncateAt.START);
+            row.setOnClickListener(v -> editGoliItem(idx));
+            TextView del = text("\u2715", 14, RED, true);
+            del.setPadding(dp(8), 0, dp(2), 0);
+            del.setFocusable(true);
+            del.setClickable(true);
+            del.setOnClickListener(v -> {
+                goliItems.remove(idx);
+                refreshGoliList();
+            });
+            GradientDrawable db = new GradientDrawable();
+            db.setCornerRadius(dp(8));
+            del.setBackground(db);
+            del.setOnFocusChangeListener((v, has) -> {
+                GradientDrawable d2 = new GradientDrawable();
+                d2.setCornerRadius(dp(8));
+                if (has) {
+                    d2.setColor(CARD_HI);
+                    d2.setStroke(dp(2), RED);
+                } else {
+                    d2.setColor(Color.TRANSPARENT);
+                }
+                del.setBackground(d2);
+            });
+            row.addView(del, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            goliContainer.addView(row, matchWrap());
+            goliContainer.addView(divider());
+            goliRows.add(row);
+        }
+
+        LinearLayout done = settingsRow("\u2190 Fatto");
+        done.setOnClickListener(v -> backToForm());
+        goliContainer.addView(withTopMargin(done, dp(8)), matchWrap());
+
+        editorPanel.post(() -> {
+            if (!goliRows.isEmpty()) goliRows.get(0).requestFocus();
+        });
+    }
+
+    /** Opens the keyboard on one joke; closing writes the text back into the list. */
+    private void editGoliItem(int idx) {
+        if (idx < 0 || idx >= goliItems.size()) return;
+        goliEditIdx = idx;
+        StringBuilder buf = new StringBuilder(goliItems.get(idx));
+        View returnRow = goliRows.get(Math.min(idx + 1, goliRows.size() - 1));
+        showKeyboard(buf, null, "NOTIZIA " + (idx + 1), returnRow, () -> {
+            String s = buf.toString().trim();
+            if (idx < goliItems.size()) goliItems.set(idx, s);
+            if (s.isEmpty() && idx < goliItems.size()) {
+                goliItems.remove(idx);   // emptying a joke deletes it
+            }
+            refreshEditorValues();
+        });
+    }
+
+    private void backToForm() {
+        goliContainer.setVisibility(View.GONE);
+        formContainer.setVisibility(View.VISIBLE);
+        refreshEditorValues();
+        editorPanel.post(() -> queryRow.requestFocus());
+    }
+
     private void refreshEditorValues() {
         tipoVal.setText(TYPE_LABELS[editType]);
+        boolean goli = TYPE_KEYS[editType].equals(Topic.GOLIARDIA);
         nomeVal.setText(nameBuf.length() == 0 ? "\u2014" : nameBuf.toString());
-        queryVal.setText(queryBuf.length() == 0 ? "\u2014" : queryBuf.toString());
+        if (goli) {
+            queryVal.setText(goliItems.size() + " notizie");
+        } else {
+            queryVal.setText(queryBuf.length() == 0 ? "\u2014" : queryBuf.toString());
+        }
         ((TextView) queryRow.getChildAt(0)).setText(QUERY_LABELS[editType]);
         boolean rss = TYPE_KEYS[editType].equals(Topic.RSS);
         rssBox.setVisibility(rss ? View.VISIBLE : View.GONE);
@@ -897,6 +1029,9 @@ public final class MainActivity extends Activity {
             slugIdx = 1;
             queryBuf.append(SLUGS[slugIdx]);
         }
+        if (TYPE_KEYS[editType].equals(Topic.GOLIARDIA) && goliItems.isEmpty()) {
+            for (String s : GOLI_SAMPLES) goliItems.add(s);   // start with a few jokes
+        }
         editorNote.setText(" ");
         refreshEditorValues();
     }
@@ -916,13 +1051,19 @@ public final class MainActivity extends Activity {
             editorNote.setText("Dai un nome all'argomento (riga Nome).");
             return;
         }
-        if (Topic.RSS.equals(type) && !q.startsWith("http")) {
-            editorNote.setText("L'URL del feed deve iniziare con http.");
-            return;
-        }
-        if (!Topic.ANSA.equals(type) && q.isEmpty()) {
-            editorNote.setText(QUERY_LABELS[editType] + " mancante.");
-            return;
+        List<String> items = null;
+        if (Topic.GOLIARDIA.equals(type)) {
+            items = new ArrayList<>();
+            for (String s : goliItems) if (!s.trim().isEmpty()) items.add(s.trim());
+        } else {
+            if (Topic.RSS.equals(type) && !q.startsWith("http")) {
+                editorNote.setText("L'URL del feed deve iniziare con http.");
+                return;
+            }
+            if (!Topic.ANSA.equals(type) && q.isEmpty()) {
+                editorNote.setText(QUERY_LABELS[editType] + " mancante.");
+                return;
+            }
         }
         List<Topic> ts = new ArrayList<>(Prefs.allTopics(this));
         // rename: carry selection and weight over to the new name
@@ -939,7 +1080,7 @@ public final class MainActivity extends Activity {
         }
         if (oldName != null) ts.removeIf(t -> t.name.equals(oldName));
         ts.removeIf(t -> t.name.equals(name));
-        ts.add(new Topic(name, type, q));
+        ts.add(new Topic(name, type, q, items));
         Prefs.setAllTopics(this, ts);
 
         List<String> sel2 = new ArrayList<>(Prefs.selection(this));
@@ -1118,31 +1259,41 @@ public final class MainActivity extends Activity {
         typeChar("DEL", false);
     }
 
-    private void showKeyboard(int field) {
-        keyTargetId = field;
-        keyTitle.setText(field == 0 ? "NOME" : ((TextView) queryRow.getChildAt(0)).getText().toString().toUpperCase());
-        keyPreview.setText(field == 0 ? nameBuf : queryBuf);
+    /** Keyboard bound to an arbitrary buffer; onClose runs when it closes (item write-back). */
+    private void showKeyboard(StringBuilder buf, TextView previewTarget, String title,
+                              View returnRow, Runnable onClose) {
+        keyBuf = buf;
+        keyPreviewTarget = previewTarget;
+        keyReturnRow = returnRow;
+        keyOnClose = onClose;
+        keyTitle.setText(title);
+        keyPreview.setText(buf);
         keyboardPanel.setVisibility(View.VISIBLE);
         if (firstKey != null) firstKey.requestFocus();
     }
 
     private boolean hideKeyboard() {
         keyboardPanel.setVisibility(View.GONE);
-        (keyTargetId == 0 ? nomeRow : queryRow).requestFocus();
+        if (keyOnClose != null) {
+            Runnable r = keyOnClose;
+            keyOnClose = null;
+            r.run();
+        }
+        if (keyReturnRow != null) keyReturnRow.requestFocus();
         return true;
     }
 
     private void typeChar(String ch, boolean respectCase) {
-        StringBuilder buf = keyTargetId == 0 ? nameBuf : queryBuf;
         if ("DEL".equals(ch)) {
-            if (buf.length() > 0) buf.deleteCharAt(buf.length() - 1);
+            if (keyBuf.length() > 0) keyBuf.deleteCharAt(keyBuf.length() - 1);
         } else if (" ".equals(ch)) {
-            if (buf.length() == 0 || buf.charAt(buf.length() - 1) != ' ') buf.append(' ');
+            if (keyBuf.length() == 0 || keyBuf.charAt(keyBuf.length() - 1) != ' ') keyBuf.append(' ');
         } else {
-            buf.append(respectCase && !caps ? ch.toLowerCase(Locale.ROOT) : ch);
+            keyBuf.append(respectCase && !caps ? ch.toLowerCase(Locale.ROOT) : ch);
         }
-        keyPreview.setText(buf);
-        refreshEditorValues();
+        keyPreview.setText(keyBuf);
+        if (keyPreviewTarget != null) keyPreviewTarget.setText(
+                keyBuf.length() == 0 ? "\u2014" : keyBuf.toString());
     }
 
     /** One cell's state: feed plus the views restyled on focus/prefs changes. */
