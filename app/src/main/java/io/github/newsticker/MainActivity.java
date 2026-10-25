@@ -423,6 +423,12 @@ public final class MainActivity extends Activity {
 
     /** Settings/action row: title left, hairline separators added by the caller. */
     private LinearLayout settingsRow(String title) {
+        return settingsRow(title, null);
+    }
+
+    /** settingsRow con un callback di focus aggiuntivo (i listener non sostituibili:
+        qui si concatena il disegno dell'evidenziazione con la logica chiamante). */
+    private LinearLayout settingsRow(String title, java.util.function.Consumer<Boolean> onF) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -447,6 +453,7 @@ public final class MainActivity extends Activity {
                 t.setTextColor(TEXT);
             }
             row.setBackground(bgd);
+            if (onF != null) onF.accept(has);
         });
         return row;
     }
@@ -1097,7 +1104,12 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < dir.size(); i++) {
             final int idx = i;
             String[] p = dir.get(i);
-            LinearLayout row = settingsRow(p[0]);
+            LinearLayout row = settingsRow(p[0], has -> {
+                if (has) {
+                    if (rssFocusIdx != idx) rssPendingDelete = -1;   // conferma annullata
+                    rssFocusIdx = idx;
+                }
+            });
             row.setId(View.generateViewId());
             if (firstRowId == View.NO_ID) firstRowId = row.getId();
             lastRowId = row.getId();
@@ -1114,12 +1126,6 @@ public final class MainActivity extends Activity {
                 if (nameBuf.length() == 0) nameBuf.append(p[0]);
                 refreshEditorValues();
                 editorNote.setText("URL inserito: regola il nome se vuoi, poi Salva.");
-            });
-            row.setOnFocusChangeListener((v, has) -> {
-                if (has) {
-                    if (rssFocusIdx != idx) rssPendingDelete = -1;   // conferma annullata
-                    rssFocusIdx = idx;
-                }
             });
             // SINISTRA sulla riga = elimina (doppia pressione per confermare)
             row.setOnKeyListener((v, k, e) -> {
