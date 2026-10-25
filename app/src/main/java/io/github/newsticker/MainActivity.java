@@ -523,7 +523,7 @@ public final class MainActivity extends Activity {
         scheduleRefresh();
     }
 
-    /** Weight step; VOL GIÃ™ below the minimum switches the topic off for good. */
+    /** Weight step; VOL GIÙ below the minimum switches the topic off for good. */
     private void bumpWeight(LinearLayout cell, int delta) {
         RowRefs refs = (RowRefs) cell.getTag();
         List<String> sel = new ArrayList<>(Prefs.selection(this));
@@ -797,7 +797,7 @@ public final class MainActivity extends Activity {
         return editorPanel;
     }
 
-    /** Mentre un overlay Ã¨ aperto il focus non deve poter scappare nella pagina sottostante. */
+    /** Mentre un overlay è aperto il focus non deve poter scappare nella pagina sottostante. */
     private void setMainPageFocusable(boolean on) {
         if (mainScroll != null) {
             mainScroll.setDescendantFocusability(on
@@ -871,7 +871,7 @@ public final class MainActivity extends Activity {
             slugIdx = 1;
             for (int i = 0; i < SLUGS.length; i++) if (SLUGS[i].equals(t.q)) slugIdx = i;
             goliItems.addAll(t.items);
-            // corregge giÃ  al caricamento: iniziale maiuscola
+            // corregge già al caricamento: iniziale maiuscola
             for (int i = 0; i < goliItems.size(); i++) {
                 String it = goliItems.get(i);
                 if (!it.isEmpty()) goliItems.set(i,
@@ -921,8 +921,8 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Item rows are built as two SIBLING focusables â€” [testo][âœ•] â€” so the D-pad can
-     * actually reach the delete button (a âœ• inside the row bounds would never get focus).
+     * Item rows are built as two SIBLING focusables — [testo][✕] — so the D-pad can
+     * actually reach the delete button (a ✕ inside the row bounds would never get focus).
      * focusRow: which row to focus after the rebuild (-1 = leave focus alone).
      */
     private void refreshGoliList(int focusRow) {
@@ -1256,7 +1256,7 @@ public final class MainActivity extends Activity {
         keysBox.setOrientation(LinearLayout.VERTICAL);
         box.addView(withTopMargin(keysBox, dp(8)));
 
-        box.addView(withTopMargin(text("Back o âŽ chiudono la tastiera", 11, LABEL, false), dp(6)));
+        box.addView(withTopMargin(text("Back o ⏎ chiudono la tastiera", 11, LABEL, false), dp(6)));
 
         keyboardPanel.addView(box, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1280,7 +1280,7 @@ public final class MainActivity extends Activity {
             keysBox.addView(withTopMargin(r1, dp(2)), matchWrap());
 
             LinearLayout r2 = new LinearLayout(this);
-            for (String s : new String[]{"@", "#", "â‚¬", "%", "&", "*", "(", ")", "+", "="}) {
+            for (String s : new String[]{"@", "#", "€", "%", "&", "*", "(", ")", "+", "="}) {
                 r2.addView(makeKey(s, 1, KeyKind.CHAR, null), copyLp(kp));
             }
             keysBox.addView(withTopMargin(r2, dp(2)), matchWrap());
@@ -1296,27 +1296,27 @@ public final class MainActivity extends Activity {
             r4.addView(makeKey("_", 1, KeyKind.CHAR, null), copyLp(kp));
             r4.addView(makeKey("", 6, KeyKind.SPACE, this::typeSpace), copyLp(kp));
             r4.addView(makeKey(",", 1, KeyKind.CHAR, null), copyLp(kp));
-            r4.addView(makeKey("âŒ«", 2, KeyKind.FUNC, this::delChar), copyLp(kp));
+            r4.addView(makeKey("⌫", 2, KeyKind.FUNC, this::delChar), copyLp(kp));
             keysBox.addView(withTopMargin(r4, dp(2)), matchWrap());
         } else {
             LinearLayout r1 = new LinearLayout(this);
-            for (String s : new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "Ã¨"}) {
+            for (String s : new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "è"}) {
                 r1.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
             }
-            r1.addView(makeKey("âŒ«", 1.4f, KeyKind.FUNC, this::delChar), copyLp(kp));
+            r1.addView(makeKey("⌫", 1.4f, KeyKind.FUNC, this::delChar), copyLp(kp));
             keysBox.addView(withTopMargin(r1, dp(2)), matchWrap());
 
             LinearLayout r2 = new LinearLayout(this);
-            for (String s : new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l", "Ã²", "Ã "}) {
+            for (String s : new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l", "ò", "à"}) {
                 r2.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
             }
-            r2.addView(makeKey("âŽ", 1.4f, KeyKind.RETURN, this::hideKeyboard), copyLp(kp));
+            r2.addView(makeKey("⏎", 1.4f, KeyKind.RETURN, this::hideKeyboard), copyLp(kp));
             keysBox.addView(withTopMargin(r2, dp(2)), matchWrap());
 
             LinearLayout r3 = new LinearLayout(this);
-            shiftKey = makeKey("â†‘", 1.4f, KeyKind.SHIFT, this::tapShift);
+            shiftKey = makeKey("↑", 1.4f, KeyKind.SHIFT, this::tapShift);
             r3.addView(shiftKey, copyLp(kp));
-            for (String s : new String[]{"z", "x", "c", "v", "b", "n", "m", "Ã¹", ",", ".", "'"}) {
+            for (String s : new String[]{"z", "x", "c", "v", "b", "n", "m", "ù", ",", ".", "'"}) {
                 r3.addView(makeKey(s, 1, KeyKind.LETTER, null), copyLp(kp));
             }
             keysBox.addView(withTopMargin(r3, dp(2)), matchWrap());
@@ -1339,7 +1339,7 @@ public final class MainActivity extends Activity {
         if (shiftKey != null) styleKey(shiftKey, shiftKey.isFocused());
     }
 
-    /** â†‘: tap = maiuscola a uno colpo, secondo tap = blocco maiuscole, terzo = rilascia. */
+    /** ↑: tap = maiuscola a uno colpo, secondo tap = blocco maiuscole, terzo = rilascia. */
     private void tapShift() {
         if (!shiftOn && !capsLock) shiftOn = true;
         else if (shiftOn && !capsLock) capsLock = true;
