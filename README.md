@@ -1,25 +1,69 @@
-# News Ticker — barra notizie scorrevole per Android TV
+[![GitHub Release](https://img.shields.io/github/v/release/giuanpadan74/news-ticker?label=beta&display_name=release&logo=github)](https://github.com/giuanpadan74/news-ticker/releases/latest)
 
-Add-on indipendente dal launcher: una barra in overlay sul fondo dello schermo
-con i titoli di ANSA (cronaca, politica, sport) e di Google News (Juventus,
-Formula 1, MotoGP, Tennis), aggiornati ogni 15 minuti. Non modifica il launcher,
-non tocca nulla se la barra è spenta, e nasconde la barra mentre un'app video
-(Stremio, YouTube, Prime, Plex...) è in riproduzione.
+# News Ticker — barra notizie scorrevole per NVIDIA Shield TV / Android TV
 
-## Permessi
+Add-on indipendente: una **barra in overlay sul fondo dello schermo** con notizie in
+continuo, ora e meteo, e una torta degli argomenti che stai seguendo. Aggiornata ogni
+15 minuti, senza modificare il launcher: quando la barra è spenta l'app non tocca
+nulla, e mentre un'app video (Stremio, YouTube, Prime, Plex...) è in riproduzione la
+barra si nasconde da sola.
 
-- `INTERNET`: legge i feed RSS di ANSA e Google News.
-- `SYSTEM_ALERT_WINDOW`: la barra in overlay sul fondo. Da concedere con
-  `appops set io.github.newsticker SYSTEM_ALERT_WINDOW allow`.
-- `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_SPECIAL_USE`: tiene vivo
-  l'aggiornamento ogni 15 min; il tipo `specialUse` dichiara l'uso dell'overlay.
-- `RECEIVE_BOOT_COMPLETED`: riporta la barra dopo un riavvio se era accesa.
-- `POST_NOTIFICATIONS`: notifica minima che tiene il servizio a chânito...
+## Scarica la beta
 
-## Setup via ADB dopo l'install
+⬇️ **[news-ticker-v0.9.5.apk](https://github.com/giuanpadan74/news-ticker/releases/latest)** — APK release (~80 KB)
 
-1. Grantee overlay:
-   `adb shell appops set io.github.newsticker SYSTEM_ALERT_WINDOW allow`
-2. Grantee ricading del top app (auto-hide dei video):
-   `adb shell appops set io.github.newsticker GET_USAGE_STATS allow`
-3. Accendi la barra: apri l'app "News Ticker" dal launcher e premi OK.
+### Installazione su Shield TV
+1. Scarica l'APK (dal browser del TV o da PC)
+2. Copia sul TV via USB, file manager o [Send Files to TV](https://play.google.com/store/apps/details?id=com.yablio.sendfilestotv)
+3. Apri il file e conferma; se richiesto, consenti le **origini sconosciute**
+   (Impostazioni → Preferenze dispositivo → Sicurezza e restrizioni)
+4. Al primo avvio concedi la **sovrimpressione**: l'app ti guida al setting
+
+Da PC, con debug USB attivo:
+```
+adb install news-ticker-v0.9.5.apk
+```
+
+## Cosa fa
+
+- **Barra notizie in overlay** sulla home: titoli in continuo con frequenza di aggiornamento di 15 minuti
+- **Argomenti personalizzati** (pulsante "+ Modifica categorie" su schermo):
+  - *Google News*: qualsiasi termine (INTER, NBA, MotoGP, la tua squadra...)
+  - *ANSA*: sezioni (Ultim'ora, Sport, Politica...) da scorrere con OK
+  - *RSS*: indirizzo di un feed qualsiasi, con verifica al salvataggio ("Feed non raggiungibile" se non risponde)
+  - *Goliardia*: frasi a tema
+- **RSS ITALIANI**: elenco di fonti italiane (built-in verificate + elenco remoto aggiornato all'apertura) con navigazione a telecomando: GIÙ entra nell'elenco, OK usa la fonte, ‹ due volte la elimina; le tue fonti verificate restano anche quando l'elenco remoto cambia
+- **Torta & legenda**: ripartizione degli argomenti, colori stabili per feed
+- **Auto-riavvio** dopo il boot se la barra era accesa
+
+### Compatibilità e requisiti
+- NVIDIA Shield TV (2015-2019, Pro/Tube) e Android TV/Google TV generico
+- Android 8.0+ (minSdk 26), nessuna dipendenza esterna
+- Navigazione a telecomando D-pad; non richiede launcher modificati
+
+## Permessi (e perché)
+
+| Permesso | Uso |
+|---|---|
+| `INTERNET` | legge i feed RSS/ANSA/Google News e l'elenco fonti RSS ITALIANI |
+| `SYSTEM_ALERT_WINDOW` | la barra in overlay sul fondo: è il cuore dell'app |
+| `FOREGROUND_SERVICE` + `specialUse` | aggiornamento ogni 15 min; il tipo `specialUse` dichiara l'uso dell'overlay |
+| `RECEIVE_BOOT_COMPLETED` | riporta la barra dopo un riavvio se era accesa |
+| `POST_NOTIFICATIONS` | notifica minima che tiene vivo il servizio in foreground |
+| `GET_USAGE_STATS` (via appops) | auto-hide della barra quando un'app video è in riproduzione |
+
+Nota: i servizi sono pensati per usare l'overlay solo se la barra è esplicitamente
+accesa dall'utente; l'app non tocca nulla quando la barra è spenta.
+
+## Compilare il progetto
+
+```
+gradle assembleRelease          # APK in app/build/outputs/apk/release/
+```
+
+L'app non usa librerie di terzi né SDK Android a pagamento: solo framework.
+
+## Beta: cosa aspettarsi
+
+È una beta viva: mancano rifiniture e vengono aggiunte novità di continuo.
+Segnala difetti o idee nelle [Issues](https://github.com/giuanpadan74/news-ticker/issues).
