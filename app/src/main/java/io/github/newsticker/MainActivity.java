@@ -817,6 +817,7 @@ public final class MainActivity extends Activity {
     /** List mode: every category, click opens the form. */
     private void showEditorList() {
         setMainPageFocusable(false);
+        editorGen++;
         listContainer.setVisibility(View.VISIBLE);
         formContainer.setVisibility(View.GONE);
         goliContainer.setVisibility(View.GONE);
@@ -855,6 +856,7 @@ public final class MainActivity extends Activity {
     /** Form mode for an existing topic or a new one (null). */
     private void showEditorForm(Topic t) {
         setMainPageFocusable(false);
+        editorGen++;
         editingTopic = t;
         nameBuf.setLength(0);
         queryBuf.setLength(0);
@@ -897,6 +899,7 @@ public final class MainActivity extends Activity {
     }
 
     private void hideEditor() {
+        editorGen++;
         editorPanel.setVisibility(View.GONE);
         setMainPageFocusable(true);
         if (!leftRows.isEmpty()) leftRows.get(0).requestFocus();
@@ -1058,12 +1061,16 @@ public final class MainActivity extends Activity {
     }
 
     private int rssFocusIdx = -1;
+    /** Bumped whenever the editor form opens or closes; a pending feed check whose
+        generation is stale must not write anything (the user moved on in the meantime). */
+    private int editorGen;
 
     /** The curated Italian feeds: click compiles URL (and name, if empty). */
     private void refreshRssList() {
         rssBox.removeAllViews();
         List<String[]> dir = rssDir();
-        TextView head = text("RSS ITALIANI  \u2022  " + dir.size() + " fonti (elenco aggiornato all'apertura dell'app)",
+        TextView head = text("RSS ITALIANI  \u2022  " + dir.size()
+                        + " fonti (remoto aggiornato all'apertura + le tue fonti verificate)",
                 12, LABEL, true);
         head.setPadding(dp(6), dp(8), 0, dp(4));
         rssBox.addView(head, matchWrap());
@@ -1097,10 +1104,20 @@ public final class MainActivity extends Activity {
     }
 
     private List<String[]> rssDir() {
-        List<String[]> cached = Prefs.rssDirectory(this);
-        if (!cached.isEmpty()) return cached;
         List<String[]> out = new ArrayList<>();
-        for (String[] p : RssDirectory.BUILT_IN) out.add(p);
+        java.util.Set<String> seen = new java.util.HashSet<>();   // no duplicate rows per URL
+        List<String[]> base = Prefs.rssDirectory(this);
+        if (base.isEmpty()) {
+            for (String[] p : RssDirectory.BUILT_IN) out.add(p);
+        } else {
+            out.addAll(base);
+        }
+        for (String[] p : Prefs.rssUser(this)) {
+            String key = p[1].toLowerCase(Locale.ROOT).trim();
+            java.util.Iterator<String[]> it = out.iterator();
+            while (it.hasNext()) if (it.next()[1].toLowerCase(Locale.ROOT).trim().equals(key)) it.remove();
+            out.add(p);
+        }
         return out;
     }
 
@@ -1168,6 +1185,50 @@ public final class MainActivity extends Activity {
                 return;
             }
         }
+        if (Topic.RSS.equals(type)) {
+            final String urlKey = q.toLowerCase(Locale.ROOT).trim();
+            boolean known = false;
+            for (String[] p : rssDir()) {   // built-ins, gist e fonti già verificate
+                if (p[1].toLowerCase(Locale.ROOT).trim().equals(urlKey)) { known = true; break; }
+            }
+            if (known) { persistAndClose(name, type, q, items); return; }
+            // URL manuale nuovo: il Salva parte solo se il feed risponde
+            final String fname = name;
+            final String fq = q;
+            final List<String> fitems = items;
+            final int gen = editorGen;
+            editorNote.setText("Verifica del feed in corso\u2026");
+            new Thread(() -> {
+                int titles = -1;
+                String err = null;
+                try {
+                    titles = RssFetcher.titles(fq, 3).size();
+                } catch (Exception e) {
+                    err = e.getMessage() == null ? e.toString() : e.getMessage();
+                }
+                final int posts = titles;
+                final String error = err;
+                ui.post(() -> {
+                    if (gen != editorGen) return;   // il form è stato chiuso/riaperto nel mentre
+                    if (posts > 0) {
+                        Prefs.addRssUser(this, fname, fq);   // fonte disponibile per i richiami futuri
+                        editorNote.setText("Feed verificato (" + posts
+                                + " titoli): aggiunto anche a RSS ITALIANI.");
+                        persistAndClose(fname, Topic.RSS, fq, fitems);
+                    } else {
+                        editorNote.setText("Feed non raggiungibile"
+                                + (error == null ? "" : " \u2014 " + error)
+                                + ". Correggi l'URL e riprova.");
+                    }
+                });
+            }).start();
+            return;
+        }
+        persistAndClose(name, type, q, items);
+    }
+
+    /** Everything Salva does once the input is validated; the editor closes here. */
+    private void persistAndClose(String name, String type, String q, List<String> items) {
         List<Topic> ts = new ArrayList<>(Prefs.allTopics(this));
         // rename: carry selection and weight over to the new name
         final String newName = name;   // le lambda richiedono una variabile final

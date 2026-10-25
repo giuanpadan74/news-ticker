@@ -9,6 +9,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -193,6 +194,49 @@ final class Prefs {
             }
         } catch (Exception ignored) {}
         sp(c).edit().putString("rssdir", a.toString()).apply();
+    }
+
+    // ---------- user-verified rss feeds ----------
+
+    /** Feeds the app itself verified while saving an RSS category; separate from the
+        remote "rssdir" cache so the gist refresh never wipes them out. */
+    static List<String[]> rssUser(Context c) {
+        List<String[]> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONArray(sp(c).getString("rssuser", "[]"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                out.add(new String[]{o.getString("n"), o.getString("u")});
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    /** Adds (or renames, when the URL is already there) one user-verified feed. */
+    static void addRssUser(Context c, String name, String url) {
+        List<String[]> cur = rssUser(c);
+        String key = url.toLowerCase(Locale.ROOT).trim();
+        List<String[]> out = new ArrayList<>();
+        boolean replaced = false;
+        for (String[] p : cur) {
+            if (p[1].toLowerCase(Locale.ROOT).trim().equals(key)) {
+                out.add(new String[]{name, url});
+                replaced = true;
+            } else {
+                out.add(p);
+            }
+        }
+        if (!replaced) out.add(new String[]{name, url});
+        JSONArray a = new JSONArray();
+        try {
+            for (String[] p : out) {
+                JSONObject o = new JSONObject();
+                o.put("n", p[0]);
+                o.put("u", p[1]);
+                a.put(o);
+            }
+        } catch (Exception ignored) {}
+        sp(c).edit().putString("rssuser", a.toString()).apply();
     }
 
     /** Percent share of every enabled feed: weights normalized so the total is 100. */
