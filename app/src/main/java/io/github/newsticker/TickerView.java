@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
  * TG5, Studio Aperto): a solid logo block on the left, then headlines scrolling by with
  * separators in the style accent color. In two-line mode a top strip carries the
  * ULTIM'ORA feed behind its flag box while the main line keeps the weighted mix.
- * Branded styles switch to bold uppercase. Redraws via the Choreographer while running.
+ * Branded styles force bold all-caps except Sky TG24, which keeps sentence case
+ * (initial cap, names untouched). Redraws via the Choreographer while running.
  */
 final class TickerView extends View {
     static final String[] STYLE_NAMES = {"Nero", "Sky TG24", "Rai News", "TG4", "TG5", "Studio Aperto"};
@@ -85,8 +86,8 @@ final class TickerView extends View {
 
     void setContent(CharSequence s) {
         String src = s == null ? "" : s.toString();
-        if (style > 0) src = src.toUpperCase(Locale.ROOT);
         segs = src.isEmpty() ? new String[0] : src.split(Pattern.quote(Sources.SEP));
+        for (int i = 0; i < segs.length; i++) segs[i] = caseFor(segs[i]);
         segW = new float[segs.length];
         total = 0;
         for (int i = 0; i < segs.length; i++) {
@@ -99,8 +100,8 @@ final class TickerView extends View {
 
     void setBreaking(CharSequence s) {
         String src = s == null ? "" : s.toString();
-        if (style > 0) src = src.toUpperCase(Locale.ROOT);
         breakSegs = src.isEmpty() ? new String[0] : src.split(Pattern.quote(Sources.SEP));
+        for (int i = 0; i < breakSegs.length; i++) breakSegs[i] = caseFor(breakSegs[i]);
         breakSegW = new float[breakSegs.length];
         breakTotal = 0;
         for (int i = 0; i < breakSegs.length; i++) {
@@ -109,6 +110,33 @@ final class TickerView extends View {
         }
         startNanos = System.nanoTime();
         invalidate();
+    }
+
+    /** Nero keeps the text as typed; the other branded skins force all-caps. */
+    private String caseFor(String s) {
+        if (style == 0) return s;
+        if (style == 1) return sentenceCase(s);
+        return s.toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * Sky TG24 style: initial cap as sentence opens and names keep their own capitals
+     * (the feed text flows through untouched), only a shouting all-caps title is
+     * lowered to a sentence.
+     */
+    private static String sentenceCase(String s) {
+        String t = s.trim();
+        if (t.isEmpty()) return s;
+        String base = t;
+        String up = t.toUpperCase(Locale.ROOT);
+        boolean hasLetter = false;
+        for (int i = 0; i < t.length(); i++) {
+            if (Character.isLetter(t.charAt(i))) { hasLetter = true; break; }
+        }
+        if (hasLetter && t.length() > 3 && t.equals(up)) {
+            base = t.toLowerCase(Locale.ROOT);
+        }
+        return Character.toUpperCase(base.charAt(0)) + base.substring(1);
     }
 
     void animate(boolean run) {
