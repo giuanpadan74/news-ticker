@@ -239,6 +239,55 @@ final class Prefs {
         sp(c).edit().putString("rssuser", a.toString()).apply();
     }
 
+    /** Removes one user source (matched by URL). */
+    static void removeRssUser(Context c, String url) {
+        String key = url.toLowerCase(Locale.ROOT).trim();
+        JSONArray a = new JSONArray();
+        for (String[] p : rssUser(c)) {
+            if (p[1].toLowerCase(Locale.ROOT).trim().equals(key)) continue;
+            JSONObject o = new JSONObject();
+            try {
+                o.put("n", p[0]);
+                o.put("u", p[1]);
+            } catch (Exception ignored) {}
+            a.put(o);
+        }
+        sp(c).edit().putString("rssuser", a.toString()).apply();
+    }
+
+    // ---------- rss sources the user explicitly removed ("‹ elimina") ----------
+
+    /** URLs hidden from the combined directory; survives the gist refresh and upgrades. */
+    static List<String> rssHidden(Context c) {
+        List<String> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONArray(sp(c).getString("rsshidden", "[]"));
+            for (int i = 0; i < a.length(); i++) out.add(a.getString(i));
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    static void addRssHidden(Context c, String url) {
+        String key = url.toLowerCase(Locale.ROOT).trim();
+        JSONArray a = new JSONArray();
+        boolean seen = false;
+        for (String s : rssHidden(c)) {
+            if (s.toLowerCase(Locale.ROOT).trim().equals(key)) seen = true;
+            a.put(s);
+        }
+        if (!seen) a.put(key);
+        sp(c).edit().putString("rsshidden", a.toString()).apply();
+    }
+
+    static void removeRssHidden(Context c, String url) {
+        String key = url.toLowerCase(Locale.ROOT).trim();
+        JSONArray a = new JSONArray();
+        for (String s : rssHidden(c)) {
+            if (!s.toLowerCase(Locale.ROOT).trim().equals(key)) a.put(s);
+        }
+        sp(c).edit().putString("rsshidden", a.toString()).apply();
+    }
+
     /** Percent share of every enabled feed: weights normalized so the total is 100. */
     static Map<String, Integer> shares(Context c) {
         List<String> sel = selection(c);

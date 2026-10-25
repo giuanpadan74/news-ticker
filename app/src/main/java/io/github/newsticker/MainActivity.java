@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
     private LinearLayout editorPanel, listContainer, formContainer, keyboardPanel;
     private LinearLayout nomeRow, queryRow;
     private TextView editorTitle, editorNote, tipoVal, nomeVal, queryVal, keyTitle, keyPreview;
-    private TextView deleteBtn;
+    private TextView deleteBtn, btnSalva, btnAnnulla;
     private Topic editingTopic;
     private int editType, slugIdx = 1;
     private ScrollView mainScroll;
@@ -117,6 +117,10 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(BG);
         scroll.setFillViewport(true);
+        // lo scroll non deve mai focalizzare se stesso: altrimenti il D-pad muore
+        // quando il fuoco scappa dall'editor sovrapposto
+        scroll.setFocusable(false);
+        scroll.setFocusableInTouchMode(false);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -722,6 +726,9 @@ public final class MainActivity extends Activity {
 
         ScrollView esc = new ScrollView(this);
         esc.setFillViewport(true);
+        // non deve mai prendere il focus lui: altrimenti il D-pad muore dentro lo scroll
+        esc.setFocusable(false);
+        esc.setFocusableInTouchMode(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
 
@@ -778,12 +785,14 @@ public final class MainActivity extends Activity {
         btns.setOrientation(LinearLayout.HORIZONTAL);
         deleteBtn = flatBtn("Elimina", RED, v -> deleteTopic());
         btns.addView(deleteBtn, new LinearLayout.LayoutParams(0, dp(38), 1f));
-        btns.addView(flatBtn("Salva", ACCENT, v -> saveTopic()), new LinearLayout.LayoutParams(0, dp(38), 1f));
-        btns.addView(flatBtn("Annulla", LABEL, v -> showEditorList()), new LinearLayout.LayoutParams(0, dp(38), 1f));
+        btnSalva = flatBtn("Salva", ACCENT, v -> saveTopic());
+        btns.addView(btnSalva, new LinearLayout.LayoutParams(0, dp(38), 1f));
+        btnAnnulla = flatBtn("Annulla", LABEL, v -> showEditorList());
+        btns.addView(btnAnnulla, new LinearLayout.LayoutParams(0, dp(38), 1f));
         content.addView(withTopMargin(btns, dp(8)));
 
         content.addView(withTopMargin(text(
-                "Google News: qualsiasi termine (INTER, NBA...). Sezione ANSA: scorre con OK. RSS: indirizzo del feed. Annulla torna all'elenco.",
+                "Google News: qualsiasi termine. Sezione ANSA: scorre con OK. RSS: GIU' entra nell'elenco, OK usa, \u2039 due volte elimina. Annulla torna all'elenco.",
                 11, LABEL, false), dp(8)));
 
         esc.addView(content, matchWrap());
@@ -818,6 +827,7 @@ public final class MainActivity extends Activity {
     private void showEditorList() {
         setMainPageFocusable(false);
         editorGen++;
+        rssPendingDelete = -1;
         listContainer.setVisibility(View.VISIBLE);
         formContainer.setVisibility(View.GONE);
         goliContainer.setVisibility(View.GONE);
@@ -858,6 +868,11 @@ public final class MainActivity extends Activity {
         setMainPageFocusable(false);
         editorGen++;
         editingTopic = t;
+        rssPendingDelete = -1;
+        queryRow.setNextFocusDownId(View.NO_ID);   // lo ricollega refreshRssList solo in RSS
+        deleteBtn.setNextFocusUpId(View.NO_ID);
+        btnSalva.setNextFocusUpId(View.NO_ID);
+        btnAnnulla.setNextFocusUpId(View.NO_ID);
         nameBuf.setLength(0);
         queryBuf.setLength(0);
         goliItems.clear();
@@ -1061,6 +1076,8 @@ public final class MainActivity extends Activity {
     }
 
     private int rssFocusIdx = -1;
+    /** Riga su cui e' armata la doppia pressione di "elimina" (-1 = nessuna). */
+    private int rssPendingDelete = -1;
     /** Bumped whenever the editor form opens or closes; a pending feed check whose
         generation is stale must not write anything (the user moved on in the meantime). */
     private int editorGen;
@@ -1075,22 +1092,53 @@ public final class MainActivity extends Activity {
         head.setPadding(dp(6), dp(8), 0, dp(4));
         rssBox.addView(head, matchWrap());
 
+        int firstRowId = View.NO_ID;
+        int lastRowId = View.NO_ID;
         for (int i = 0; i < dir.size(); i++) {
             final int idx = i;
             String[] p = dir.get(i);
             LinearLayout row = settingsRow(p[0]);
-            setAccessory(row, text("usa \u203A", 12, ACCENT, false));
+            row.setId(View.generateViewId());
+            if (firstRowId == View.NO_ID) firstRowId = row.getId();
+            lastRowId = row.getId();
+            LinearLayout acts = new LinearLayout(this);
+            acts.setOrientation(LinearLayout.HORIZONTAL);
+            acts.setGravity(Gravity.CENTER_VERTICAL);
+            acts.addView(text("usa \u203A", 12, ACCENT, false));
+            acts.addView(text("\u00A0\u00A0\u2039 elimina", 12, RED, false));
+            setAccessory(row, acts);
             row.setOnClickListener(v -> {
+                rssPendingDelete = -1;
                 queryBuf.setLength(0);
                 queryBuf.append(p[1]);
                 if (nameBuf.length() == 0) nameBuf.append(p[0]);
                 refreshEditorValues();
                 editorNote.setText("URL inserito: regola il nome se vuoi, poi Salva.");
             });
-            row.setOnFocusChangeListener((v, has) -> { if (has) rssFocusIdx = idx; });
+            row.setOnFocusChangeListener((v, has) -> {
+                if (has) {
+                    if (rssFocusIdx != idx) rssPendingDelete = -1;   // conferma annullata
+                    rssFocusIdx = idx;
+                }
+            });
+            // SINISTRA sulla riga = elimina (doppia pressione per confermare)
+            row.setOnKeyListener((v, k, e) -> {
+                if (e.getAction() != KeyEvent.ACTION_DOWN
+                        || keyboardPanel.getVisibility() == View.VISIBLE
+                        || k != KeyEvent.KEYCODE_DPAD_LEFT) return false;
+                return rssDeleteStep(idx, p);
+            });
             rssBox.addView(row, matchWrap());
             rssBox.addView(divider());
         }
+
+        // GIU' da "URL del feed" deve entrare nell'elenco: wiring esplicito cosi' la
+        // navigazione col telecomando non dipende dallo scroll del pannello
+        queryRow.setNextFocusDownId(firstRowId);
+        // e salendo dai pulsanti si deve attraversare l'elenco, non saltarlo
+        deleteBtn.setNextFocusUpId(lastRowId);
+        btnSalva.setNextFocusUpId(lastRowId);
+        btnAnnulla.setNextFocusUpId(lastRowId);
 
         // il rebuild non deve far perdere il focus: lo ripristina sulla voce selezionata
         if (rssFocusIdx >= 0 && keyboardPanel.getVisibility() != View.VISIBLE) {
@@ -1101,6 +1149,32 @@ public final class MainActivity extends Activity {
                 if (row != null) row.requestFocus();
             });
         }
+    }
+
+    /** "elimina" col tasto SINISTRA sulla riga: la prima pressione chiede conferma,
+        la seconda rimuove la fonte da RSS ITALIANI. */
+    private boolean rssDeleteStep(int idx, String[] p) {
+        if (rssPendingDelete != idx) {
+            rssPendingDelete = idx;
+            editorNote.setText("Eliminare '" + p[0]
+                    + "' da RSS ITALIANI? Premi ancora \u2039 per confermare.");
+            return true;
+        }
+        rssPendingDelete = -1;
+        String key = p[1].toLowerCase(Locale.ROOT).trim();
+        boolean wasUser = false;
+        for (String[] u : Prefs.rssUser(this)) {
+            if (u[1].toLowerCase(Locale.ROOT).trim().equals(key)) { wasUser = true; break; }
+        }
+        if (wasUser) {
+            Prefs.removeRssUser(this, p[1]);
+            editorNote.setText("'" + p[0] + "' tolta dalle tue fonti verificate.");
+        } else {
+            Prefs.addRssHidden(this, p[1]);
+            editorNote.setText("'" + p[0] + "' tolta da RSS ITALIANI (ricompare se la verifichi di nuovo).");
+        }
+        refreshRssList();
+        return true;
     }
 
     private List<String[]> rssDir() {
@@ -1117,6 +1191,12 @@ public final class MainActivity extends Activity {
             java.util.Iterator<String[]> it = out.iterator();
             while (it.hasNext()) if (it.next()[1].toLowerCase(Locale.ROOT).trim().equals(key)) it.remove();
             out.add(p);
+        }
+        // le fonti eliminate con "‹ elimina" non tornano con il refresh remoto del gist
+        java.util.Set<String> hide = new java.util.HashSet<>();
+        for (String u : Prefs.rssHidden(this)) hide.add(u.toLowerCase(Locale.ROOT).trim());
+        if (!hide.isEmpty()) {
+            out.removeIf(p -> hide.contains(p[1].toLowerCase(Locale.ROOT).trim()));
         }
         return out;
     }
@@ -1149,6 +1229,12 @@ public final class MainActivity extends Activity {
             for (String s : GOLI_SAMPLES) goliItems.add(s);   // start with a few jokes
         }
         if (TYPE_KEYS[editType].equals(Topic.RSS)) refreshRssList();
+        else {
+            rssPendingDelete = -1;
+            deleteBtn.setNextFocusUpId(View.NO_ID);
+            btnSalva.setNextFocusUpId(View.NO_ID);
+            btnAnnulla.setNextFocusUpId(View.NO_ID);
+        }
         editorNote.setText(" ");
         refreshEditorValues();
     }
@@ -1212,6 +1298,7 @@ public final class MainActivity extends Activity {
                     if (gen != editorGen) return;   // il form è stato chiuso/riaperto nel mentre
                     if (posts > 0) {
                         Prefs.addRssUser(this, fname, fq);   // fonte disponibile per i richiami futuri
+                        Prefs.removeRssHidden(this, fq);     // se era stata eliminata, torna visibile
                         editorNote.setText("Feed verificato (" + posts
                                 + " titoli): aggiunto anche a RSS ITALIANI.");
                         persistAndClose(fname, Topic.RSS, fq, fitems);
@@ -1287,6 +1374,8 @@ public final class MainActivity extends Activity {
         keyboardPanel.setBackgroundColor(0xFF000000);
         keyboardPanel.setGravity(Gravity.CENTER);
         keyboardPanel.setVisibility(View.GONE);
+        keyboardPanel.setFocusable(false);
+        keyboardPanel.setFocusableInTouchMode(false);
         keyboardPanel.setPadding(dp(24), dp(16), dp(24), dp(16));
         keyboardPanel.setOnKeyListener((v, k, e) ->
                 e.getAction() == KeyEvent.ACTION_DOWN && k == KeyEvent.KEYCODE_BACK && hideKeyboard());
