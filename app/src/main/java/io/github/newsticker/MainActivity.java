@@ -51,6 +51,8 @@ public final class MainActivity extends Activity {
 
     private TextView pill;
     private SwitchView powerSwitch;
+    private SwitchView hideSwitch;
+    private TextView posValue;
     private TextView visValue;
     private TextView linesValue;
     private TextView styleValue;
@@ -212,12 +214,29 @@ public final class MainActivity extends Activity {
         settings.addView(powerRow);
         settings.addView(divider());
 
+        LinearLayout hideRow = settingsRow("Auto-hide");
+        hideSwitch = new SwitchView(this);
+        setAccessory(hideRow, hideSwitch);
+        hideRow.setOnClickListener(v -> onAutohide());
+        registerLeftRow(hideRow, 1);
+        settings.addView(hideRow);
+        settings.addView(divider());
+
+        LinearLayout posRow = settingsRow("Posizione");
+        posValue = text("", 14, LABEL, true);
+        setAccessory(posRow, posValue);
+        posRow.addView(text("  \u203A", 16, LABEL, false));
+        posRow.setOnClickListener(v -> onPos());
+        registerLeftRow(posRow, 2);
+        settings.addView(posRow);
+        settings.addView(divider());
+
         LinearLayout visRow = settingsRow("Visibilit\u00e0");
         visValue = text("", 14, LABEL, false);
         setAccessory(visRow, visValue);
         visRow.addView(text("  \u203A", 16, LABEL, false));
         visRow.setOnClickListener(v -> onMode());
-        registerLeftRow(visRow, 1);
+        registerLeftRow(visRow, 3);
         settings.addView(visRow);
         settings.addView(divider());
 
@@ -230,7 +249,7 @@ public final class MainActivity extends Activity {
             syncAll();
             scheduleRefresh();
         });
-        registerLeftRow(linesRow, 2);
+        registerLeftRow(linesRow, 4);
         settings.addView(linesRow);
         settings.addView(divider());
 
@@ -243,7 +262,7 @@ public final class MainActivity extends Activity {
             syncAll();
             scheduleRefresh();
         });
-        registerLeftRow(styleRow, 3);
+        registerLeftRow(styleRow, 5);
         settings.addView(styleRow);
 
         left.addView(settings, matchWrap());
@@ -565,6 +584,20 @@ public final class MainActivity extends Activity {
         syncAll();
     }
 
+    /** Auto-hide: the bar leaves the screen while media plays; off = bar stays over everything. */
+    private void onAutohide() {
+        Prefs.setAutohide(this, !Prefs.autohide(this));
+        syncAll();
+        scheduleRefresh();   // the service re-evaluates within its next 3 s poll
+    }
+
+    /** Top or bottom edge; the service rebuilds the overlay window on the next refresh. */
+    private void onPos() {
+        Prefs.setAtTop(this, !Prefs.atTop(this));
+        syncAll();
+        if (Prefs.enabled(this)) scheduleRefresh();
+    }
+
     /** Re-arms the service fetch with the new prefs, debounced while D-pad spamming. */
     private void scheduleRefresh() {
         if (!Prefs.enabled(this)) return;
@@ -586,6 +619,8 @@ public final class MainActivity extends Activity {
         pill.setBackground(pb);
 
         powerSwitch.setOn(on);
+        hideSwitch.setOn(Prefs.autohide(this));
+        posValue.setText(Prefs.atTop(this) ? "Sopra" : "Sotto");
         visValue.setText(visibleLabel());
         linesValue.setText(String.valueOf(Prefs.lines(this)));
         styleValue.setText(TickerView.STYLE_NAMES[Prefs.styleIndex(this)]);

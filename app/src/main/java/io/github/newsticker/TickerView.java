@@ -42,6 +42,7 @@ final class TickerView extends View {
 
     private final int style;
     private final boolean two;
+    private final boolean atTop;
     private final float d;
     private final Paint fill = new Paint();
     private final Paint main = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -60,10 +61,11 @@ final class TickerView extends View {
     private volatile boolean running;
     private long startNanos;
 
-    TickerView(Context c, int styleIndex, boolean twoLines) {
+    TickerView(Context c, int styleIndex, boolean twoLines, boolean atTopEdge) {
         super(c);
         style = styleIndex;
         two = twoLines;
+        atTop = atTopEdge;
         d = c.getResources().getDisplayMetrics().density;
         Typeface tf = style == 0 ? Typeface.create("sans-serif", Typeface.NORMAL)
                 : Typeface.create("sans-serif", Typeface.BOLD);
@@ -145,6 +147,41 @@ final class TickerView extends View {
             startNanos = System.nanoTime();
             postInvalidateOnAnimation();
         }
+    }
+
+    /**
+     * Shows the bar or slides it off the bottom edge, then parks it GONE on screen. The
+     * window itself stays in the WindowManager: a GONE view costs nothing. While hidden
+     * the redraw loop is stopped; reveal(true) restarts the scroll phase from the top.
+     */
+    void reveal(boolean show) {
+        animate().cancel();
+        int dir = atTop ? -1 : 1;
+        if (show) {
+            if (getVisibility() == View.VISIBLE && getTranslationY() == 0f) {
+                if (!running) {   // already in place, just revive the scroll loop
+                    running = true;
+                    startNanos = System.nanoTime();
+                    postInvalidateOnAnimation();
+                }
+                return;
+            }
+            animate().setDuration(0).translationY(dir * getHeight()).start();   // park off-edge
+            setVisibility(View.VISIBLE);
+            animate().setDuration(170).translationY(0f).start();
+            running = true;
+            startNanos = System.nanoTime();
+            postInvalidateOnAnimation();
+        } else {
+            running = false;
+            animate().setDuration(170).translationY(dir * getHeight())
+                    .withEndAction(() -> setVisibility(View.GONE)).start();
+        }
+    }
+
+    /** Re-arms the invalidate chain if a skipped frame ever killed it. */
+    void heartbeat() {
+        if (running && isAttachedToWindow()) postInvalidateOnAnimation();
     }
 
     @Override

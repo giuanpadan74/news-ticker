@@ -50,10 +50,20 @@ adb install news-ticker-v0.9.5.apk
 | `FOREGROUND_SERVICE` + `specialUse` | aggiornamento ogni 15 min; il tipo `specialUse` dichiara l'uso dell'overlay |
 | `RECEIVE_BOOT_COMPLETED` | riporta la barra dopo un riavvio se era accesa |
 | `POST_NOTIFICATIONS` | notifica minima che tiene vivo il servizio in foreground |
-| `GET_USAGE_STATS` (via appops) | auto-hide della barra quando un'app video è in riproduzione |
+| `GET_USAGE_STATS` (via appops) | sapere quale app è in primo piano (modalità "solo home" e nascondere la barra nell'app stessa) |
 
 Nota: i servizi sono pensati per usare l'overlay solo se la barra è esplicitamente
 accesa dall'utente; l'app non tocca nulla quando la barra è spenta.
+
+L'auto-hide è una funzione scegliibile nelle impostazioni: riga "**Auto-hide**"
+(subito dopo "Barra notizie") con interruttore on/off. Quando è ON la barra esce con
+una piccola animazione mentre la TV sta davvero riproducendo audio/video
+(`AudioManager.getActivePlaybackConfigurations()`, nessun permesso extra) e rientra
+quando la riproduzione finisce — vale per Stremio, Plex, Prime Video, Tivimate, Rai
+Play e qualunque player. Quando è OFF la barra resta sopra qualunque app, anche
+durante i video. La riga "**Posizione**" (Sopra/Sotto, default Sotto) sposta il bordo
+dove compare la barra. Nei menu delle app (senza riproduzione) la barra continua a
+scorrere invece di restare congelata sopra l'app.
 
 ## Compilare il progetto
 

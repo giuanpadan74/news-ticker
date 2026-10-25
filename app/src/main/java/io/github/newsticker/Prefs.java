@@ -34,13 +34,31 @@ final class Prefs {
         sp(c).edit().putBoolean("enabled", v).apply();
     }
 
-    /** "always" shows the bar everywhere except the video apps; "home" only on launchers. */
+    /** "always" shows the bar everywhere; "home" only on launchers. */
     static String mode(Context c) {
         return sp(c).getString("mode", "always");
     }
 
     static void setMode(Context c, String v) {
         sp(c).edit().putString("mode", v).apply();
+    }
+
+    /** Slides the bar away while the TV renders audio/video; default on. */
+    static boolean autohide(Context c) {
+        return sp(c).getBoolean("autohide", true);
+    }
+
+    static void setAutohide(Context c, boolean v) {
+        sp(c).edit().putBoolean("autohide", v).apply();
+    }
+
+    /** Bar pinned to the top or the bottom edge; default bottom. */
+    static boolean atTop(Context c) {
+        return sp(c).getBoolean("attop", false);
+    }
+
+    static void setAtTop(Context c, boolean v) {
+        sp(c).edit().putBoolean("attop", v).apply();
     }
 
     // ---------- topic selection & weights ----------

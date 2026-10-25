@@ -10,8 +10,8 @@ android {
         applicationId 'io.github.newsticker'
         minSdk 26
         targetSdk 34
-        versionCode 22
-        versionName '0.9.5'
+        versionCode 24
+        versionName '0.9.7'
     }
 
     buildTypes {

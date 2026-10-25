@@ -9,6 +9,9 @@ import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
 import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -26,21 +29,15 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * The heart: an overlay window pinned to the bottom of the screen, a 15-minute feed
- * refresh, and a foreground-app watcher that hides the bar while a video app plays.
- * Overlay is granted over ADB (_SYSTEM_ALERT_WINDOW appop); no UI runs from the service.
+ * refresh, and a playback watcher that slides the bar away while the TV renders
+ * audio/video. Overlay is granted over ADB (_SYSTEM_ALERT_WINDOW appop); no UI runs
+ * from the service.
  */
 public final class TickerService extends Service {
     private static final String CHANNEL = "tick";
     private static final long REFRESH_MIN = 15L;
     private static final long POLL_TOP_APP_S = 3L;
     private static final int MAX_PER_FEED = 12;
-
-    /** Full-screen video apps of the owner; extended from time to time by hand. */
-    private static final Set<String> VIDEO_APPS = new HashSet<>(List.of(
-            "com.stremio.one", "com.google.android.youtube.tv", "com.google.android.youtube.tvmusic",
-            "com.netflix.ninja", "com.amazon.amazonvideo.livingroom.nvidia",
-            "com.amazon.amazonvideo.livingroom", "org.jellyfin.mobile", "org.videolan.vlc",
-            "com.plexapp.plex", "tv.danmaku.ila.tv", "com.google.android.videos"));
 
     private final ScheduledExecutorService pool = Executors.newSingleThreadScheduledExecutor();
     private final Handler main = new Handler();
@@ -52,6 +49,7 @@ public final class TickerService extends Service {
     private CharSequence cachedBreaking = "";
     private int curLines = -1;
     private int curStyle = -1;
+    private int curTop = -1;
     private boolean refreshScheduled;
     private boolean pollScheduled;
 
@@ -185,17 +183,42 @@ public final class TickerService extends Service {
                     }
                 } else break;
             }
-            boolean hide = VIDEO_APPS.contains(lastTop)
-                    || ("home".equals(Prefs.mode(TickerService.this)) && !isLauncher(lastTop))
-                    || "io.github.newsticker".equals(lastTop);
+            boolean launcher = isLauncher(lastTop);
+            boolean playing = mediaPlaying();
+            boolean hide = "io.github.newsticker".equals(lastTop)
+                    || ("home".equals(Prefs.mode(TickerService.this)) && !launcher)
+                    || (Prefs.autohide(this) && !launcher && playing);
             if (hide && shown) {
+                android.util.Log.i("NewsTick", "hide: top=" + lastTop + " playing=" + playing);
                 main.post(() -> setShown(false));
             } else if (!hide && !shown && view != null) {
+                android.util.Log.i("NewsTick", "show: top=" + lastTop);
                 main.post(() -> setShown(true));
+            } else if (shown) {
+                // no state change: re-arm the invalidate chain in case a slow app launch
+                // (Plex, Stremio cold start) dropped one of its frames
+                main.post(this::heartbeat);
             }
         } catch (Exception e) {
             // Short-pol failures are noisy; only debug when run manually.
         }
+    }
+
+    /** True while any app renders audio/video: active players, API 26+, no permission. */
+    private boolean mediaPlaying() {
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        for (AudioPlaybackConfiguration p : am.getActivePlaybackConfigurations()) {
+            int usage = p.getAudioAttributes().getUsage();
+            if (usage == AudioAttributes.USAGE_MEDIA || usage == AudioAttributes.USAGE_GAME) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Revives the ticker's redraw loop after it ever died on a skipped frame. */
+    private void heartbeat() {
+        if (shown && view != null) view.heartbeat();
     }
 
     /** Launchers that answer HOME on this TV; cached once. */
@@ -224,9 +247,10 @@ public final class TickerService extends Service {
     private void addOverlay() {
         int lines = Prefs.lines(this);
         int style = Prefs.styleIndex(this);
+        int top = Prefs.atTop(this) ? 1 : 0;
         if (view != null) {
-            if (curLines != lines || curStyle != style) {
-                removeOverlay();   // rebuild with the new height/skin
+            if (curLines != lines || curStyle != style || curTop != top) {
+                removeOverlay();   // rebuild with the new height/skin/edge
             } else {
                 setShown(true);
                 return;
@@ -235,9 +259,10 @@ public final class TickerService extends Service {
         if (!Prefs.enabled(this)) return;
         curLines = lines;
         curStyle = style;
+        curTop = top;
         float d = getResources().getDisplayMetrics().density;
         int hDp = lines == 2 ? 58 : 34;
-        view = new TickerView(this, style, lines == 2);
+        view = new TickerView(this, style, lines == 2, top == 1);
         view.setContent(cached);
         if (lines == 2) view.setBreaking(cachedBreaking);
         view.setLayoutParams(new android.view.ViewGroup.LayoutParams(
@@ -248,7 +273,7 @@ public final class TickerService extends Service {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.BOTTOM | Gravity.START;
+        lp.gravity = (top == 1 ? Gravity.TOP : Gravity.BOTTOM) | Gravity.START;
         try {
             wm.addView(view, lp);
             setShown(true);
@@ -269,6 +294,6 @@ public final class TickerService extends Service {
         if (view == null) return;
         if (s && !Prefs.enabled(this)) return;
         shown = s;
-        view.animate(s);
+        view.reveal(s);
     }
 }
